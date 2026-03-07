@@ -45,7 +45,7 @@ export function WeeklyTopicTab({ systemSettings, logs, currentWeeklyMonday, isTo
                                 <h3 className="text-2xl font-black text-white">{q.title}</h3>
                                 <p className="text-sm text-slate-400 font-bold italic">{q.sub}</p>
                             </div>
-                            <div className="text-sm font-black text-blue-400 bg-blue-400/10 px-3 py-1 rounded-xl">+$ {q.reward}</div>
+                            <div className="text-sm font-black text-blue-400 bg-blue-400/10 px-3 py-1 rounded-xl">+ {q.reward}</div>
                         </div>
                         <div className="flex justify-between items-center px-2 mx-auto">
                             {['一', '二', '三', '四', '五', '六', '日'].map((day, idx) => {

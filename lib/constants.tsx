@@ -41,7 +41,7 @@ export const ARTIFACTS_CONFIG = [
         id: 'a2',
         name: '照妖鏡',
         description: '「照見」——日出前的清醒自照，破曉打拳的修行哲學。',
-        effect: '破曉打拳（q1 勾選「破曉打拳」）額外 +150 修為（不可回溯）',
+        effect: '破曉打拳額外 +150 修為（不可回溯）',
         price: 250,
         isTeamBinding: false,
         limit: 1
@@ -50,7 +50,7 @@ export const ARTIFACTS_CONFIG = [
         id: 'a3',
         name: '七彩袈裟',
         description: '唐三藏的聖物，象徵精進修行的榮耀。',
-        effect: '全隊打拳（q1 / 破曉打拳）經驗 ×1.5 倍',
+        effect: '全隊打拳經驗 ×1.5 倍',
         price: 550, // per member
         isTeamBinding: true,
         limit: 99
@@ -59,7 +59,7 @@ export const ARTIFACTS_CONFIG = [
         id: 'a4',
         name: '幌金繩',
         description: '金角大王的法寶，能縛住一切貪著。',
-        effect: '參加體系活動（t 開頭）個人經驗 ×1.5 倍',
+        effect: '參加體系活動個人經驗 ×1.5 倍',
         price: 700, // per member
         isTeamBinding: true,
         limit: 99
@@ -67,8 +67,8 @@ export const ARTIFACTS_CONFIG = [
     {
         id: 'a5',
         name: '金剛杖',
-        description: '六十歲以上長輩免費贈送，無法與如意金箍棒疊加。',
-        effect: '個人總經驗 ×1.2 倍（60歲以上長輩免費贈；不可與 a1 疊加）',
+        description: '六十歲以上修煉者專屬道具，無法與如意金箍棒疊加。',
+        effect: '個人總經驗 ×1.2 倍（60歲以上長輩免費贈；不可與如意金箍棒疊加）',
         price: 0, // free for elders, admin grants
         isTeamBinding: false,
         limit: 1,
@@ -202,13 +202,13 @@ export const MONSTER_DROP_ITEMS = [
 // 怪物掉落機率表（%）
 // 怪物分類：普通怪 Lv1-3 | 心魔怪（demon trait）| 精英怪 Lv7+ | 世界Boss
 export const MONSTER_DROP_RATES: Record<string, { normal: number; demon: number; elite: number; boss: number }> = {
-    d1: { normal: 8,  demon: 15, elite: 20, boss: 30 },
-    d2: { normal: 6,  demon: 12, elite: 18, boss: 25 },
-    d3: { normal: 1,  demon: 8,  elite: 15, boss: 20 },
-    d4: { normal: 0,  demon: 3,  elite: 10, boss: 18 },
-    d5: { normal: 5,  demon: 10, elite: 12, boss: 20 },
-    d6: { normal: 0,  demon: 5,  elite: 8,  boss: 15 },
-    d7: { normal: 0,  demon: 1,  elite: 3,  boss: 10 },
+    d1: { normal: 8, demon: 15, elite: 20, boss: 30 },
+    d2: { normal: 6, demon: 12, elite: 18, boss: 25 },
+    d3: { normal: 1, demon: 8, elite: 15, boss: 20 },
+    d4: { normal: 0, demon: 3, elite: 10, boss: 18 },
+    d5: { normal: 5, demon: 10, elite: 12, boss: 20 },
+    d6: { normal: 0, demon: 5, elite: 8, boss: 15 },
+    d7: { normal: 0, demon: 1, elite: 3, boss: 10 },
 };
 
 export const DAILY_QUEST_CONFIG: Quest[] = [
