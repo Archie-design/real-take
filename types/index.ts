@@ -6,6 +6,7 @@ export interface CharacterStats {
   Role: string;
   Level: number;
   Exp: number;
+  Coins: number; // Added as per instruction
   EnergyDice: number;
   Spirit: number;
   Physique: number;
@@ -18,6 +19,35 @@ export interface CharacterStats {
   TotalFines: number;
   CurrentQ: number;
   CurrentR: number;
+  Email?: string;
+  SquadName?: string;
+  TeamName?: string;
+  IsCaptain?: boolean;
+  Inventory: string[]; // Changed from optional to required as per instruction
+  InitialFortunes?: Record<string, number>;
+  DDA_Difficulty?: string;
+  GameGold?: number;
+  GameInventory?: Array<{ id: string; count: number }>;
+  HP?: number;
+  MaxHP?: number;
+  Facing?: number; // 0-5 direction
+  GoldenDice?: number;
+}
+
+export interface Roster {
+  email: string;
+  squad_name?: string;
+  team_name?: string;
+  is_captain?: boolean;
+}
+
+export interface TeamSettings {
+  team_name: string;
+  team_coins: number;
+  mandatory_quest_id?: string;       // 本週抽出的推薦定課 QuestID
+  mandatory_quest_week?: string;     // 本次抽籤週一日期（YYYY-MM-DD）
+  quest_draw_history?: string[];     // 已抽過的 QuestID 陣列
+  inventory?: any;
 }
 
 export interface DailyLog {
@@ -32,22 +62,39 @@ export interface DailyLog {
 export interface Quest {
   id: string;
   title: string;
-  sub?: string;
+  sub?: string;   // 任務名稱（特殊仙緣任務的短名稱，如「跟父母三道菜」）
+  desc?: string;  // 任務說明（完成標準說明，如「面對面或是視訊」）
   reward: number;
   dice?: number;
   icon?: string;
   limit?: number;
 }
 
+export interface TemporaryQuest extends Quest {
+  active: boolean;
+  created_at?: string;
+}
+
 export interface SystemSettings {
-  MandatoryQuestId: string;
   TopicQuestTitle: string;
+  WorldState?: string;
+  WorldStateMsg?: string;
 }
 
 export interface TopicHistory {
   id: number;
   TopicTitle: string;
   created_at: string;
+}
+
+export interface TerrainInfo {
+  id: string;
+  name: string;
+  url: string;
+  scale: number;
+  vOffset: number;
+  color: string;
+  effect: string;
 }
 
 export interface ZoneInfo {
@@ -73,4 +120,5 @@ export interface HexData extends HexPos {
   key: string;
   zoneId?: string;
   subIdx?: number;
+  ring?: 'crisp' | 'performance' | 'culled';
 }

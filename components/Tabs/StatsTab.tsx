@@ -1,5 +1,5 @@
 import React from 'react';
-import { Skull, Wand2, Sparkles, Shield, Heart, Brain, Zap, Trophy } from 'lucide-react';
+import { Skull, Wand2, Sparkles, Shield, Heart, Brain, Zap, Trophy, Coins } from 'lucide-react';
 import { CharacterStats } from '@/types';
 
 interface StatCardProps {
@@ -49,9 +49,18 @@ export function StatsTab({ userData, roleTrait }: StatsTabProps) {
                 <p className="text-xs text-white leading-relaxed text-left">{roleTrait.isCursed ? roleTrait.curseEffect : roleTrait.talent}</p>
             </div>
 
-            <div className="bg-gradient-to-br from-red-950/40 to-slate-900 border-2 border-white/5 p-8 rounded-4xl shadow-2xl text-center mx-auto">
-                <span className="text-6xl font-black text-white mb-2 block">NT$ {userData.TotalFines}</span>
-                <p className="text-xs text-slate-500 font-black uppercase tracking-[0.2em]">累世罰金餘額</p>
+            <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gradient-to-br from-yellow-900/40 to-slate-900 border-2 border-yellow-500/20 p-6 rounded-4xl shadow-2xl text-center flex flex-col items-center justify-center">
+                    <Coins className="text-yellow-500 mb-2" size={24} />
+                    <span className="text-4xl font-black text-yellow-500 mb-1">{userData.Coins || 0}</span>
+                    <p className="text-[10px] text-yellow-500/70 font-black uppercase tracking-[0.2em]">天庭金幣餘額</p>
+                </div>
+
+                <div className="bg-gradient-to-br from-red-950/40 to-slate-900 border-2 border-white/5 p-6 rounded-4xl shadow-2xl text-center flex flex-col items-center justify-center">
+                    <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center mb-2 mx-auto"><Skull className="text-red-500" size={16} /></div>
+                    <span className="text-4xl font-black text-white mb-1">{userData.TotalFines}</span>
+                    <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em]">累世罰金餘額</p>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 gap-5 text-center mx-auto">

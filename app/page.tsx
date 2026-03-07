@@ -5,23 +5,30 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 import {
   AlertTriangle, CheckCircle2, Sparkles, MapIcon, ChevronLeft,
-  Dice5, Footprints, Loader2, RotateCcw, UserPlus, ArrowRight
+  Dice5, Footprints, Loader2, RotateCcw, UserPlus, ArrowRight, Plus, Minus
 } from 'lucide-react';
 
-import { CharacterStats, DailyLog, Quest, SystemSettings, HexData, TopicHistory } from '@/types';
+import { CharacterStats, DailyLog, Quest, SystemSettings, HexData, TopicHistory, TemporaryQuest } from '@/types';
 import { getLogicalDateStr, getWeeklyMonday } from '@/lib/utils/time';
 import { standardizePhone } from '@/lib/utils/phone';
-import { ROLE_CURE_MAP, DEFAULT_CONFIG, TERRAIN_TYPES, ADVENTURE_COST, BASE_START_DATE_STR, PENALTY_PER_DAY, ADMIN_PASSWORD } from '@/lib/constants';
-import { axialToPixel, getHexPointsStr, getHexRegion, getHexDist } from '@/lib/utils/hex';
+import { ROLE_CURE_MAP, DEFAULT_CONFIG, ADVENTURE_COST, ADMIN_PASSWORD } from '@/lib/constants';
+import { axialToPixel, getHexPointsStr, getHexRegion, getHexDist, axialToPixelPos } from '@/lib/utils/hex';
+import { WorldMap } from '@/components/Map/WorldMap';
 
 import { Header } from '@/components/Layout/Header';
 import { LoginForm } from '@/components/Login/LoginForm';
+import { RegisterForm, evaluateFate } from '@/components/Login/RegisterForm';
 import { DailyQuestsTab } from '@/components/Tabs/DailyQuestsTab';
 import { WeeklyTopicTab } from '@/components/Tabs/WeeklyTopicTab';
 import { StatsTab } from '@/components/Tabs/StatsTab';
 import { RankTab } from '@/components/Tabs/RankTab';
+import { CaptainTab } from '@/components/Tabs/CaptainTab';
+import { ShopTab } from '@/components/Tabs/ShopTab';
 import { AdminDashboard } from '@/components/Admin/AdminDashboard';
 import { processCheckInTransaction } from '@/app/actions/quest';
+import { triggerWeeklySnapshot, importRostersData, checkWeeklyW3Compliance } from '@/app/actions/admin';
+import { drawWeeklyQuestForSquad, autoDrawAllSquads } from '@/app/actions/team';
+import { generatePersonalizedEncounter } from '@/app/actions/gemini';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -42,22 +49,31 @@ const MessageBox = ({ message, onClose, type = 'info' }: { message: string, onCl
 export default function App() {
   const [view, setView] = useState<'login' | 'register' | 'app' | 'loading' | 'admin' | 'map'>('loading');
   const [isSyncing, setIsSyncing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'daily' | 'weekly' | 'stats' | 'rank'>('daily');
+  const [activeTab, setActiveTab] = useState<'daily' | 'weekly' | 'stats' | 'rank' | 'captain' | 'shop'>('daily');
   const [userData, setUserData] = useState<CharacterStats | null>(null);
   const [logs, setLogs] = useState<DailyLog[]>([]);
   const [leaderboard, setLeaderboard] = useState<CharacterStats[]>([]);
   const [topicHistory, setTopicHistory] = useState<TopicHistory[]>([]);
-  const [systemSettings, setSystemSettings] = useState<SystemSettings>({ MandatoryQuestId: 'q2', TopicQuestTitle: '載入中...' });
+  const [temporaryQuests, setTemporaryQuests] = useState<TemporaryQuest[]>([]);
+  const [systemSettings, setSystemSettings] = useState<SystemSettings>({ TopicQuestTitle: '載入中...' });
   const [modalMessage, setModalMessage] = useState<{ text: string, type: 'info' | 'error' | 'success' } | null>(null);
   const [undoTarget, setUndoTarget] = useState<Quest | null>(null);
   const [adminAuth, setAdminAuth] = useState(false);
   const [mapData, setMapData] = useState<Record<string, string>>({});
-  const [hoveredHex, setHoveredHex] = useState<string | null>(null);
+  const [mapEntities, setMapEntities] = useState<any[]>([]);
+  const [teamSettings, setTeamSettings] = useState<any>(null);
+  const [teamMemberCount, setTeamMemberCount] = useState<number>(1);
+  const [corridorL, setCorridorL] = useState<number>(DEFAULT_CONFIG.CORRIDOR_L);
+  const [corridorW, setCorridorW] = useState<number>(DEFAULT_CONFIG.CORRIDOR_W);
 
-  const [camX, setCamX] = useState(0);
-  const [camY, setCamY] = useState(0);
+  // States for Five Fortunes tie breaking
+  const [tieBreakData, setTieBreakData] = useState<any>(null);
+
+  // Map state
   const [stepsRemaining, setStepsRemaining] = useState(0);
+  const [moveMultiplier, setMoveMultiplier] = useState(1);
   const [isRolling, setIsRolling] = useState(false);
+  const [personalEncounter, setPersonalEncounter] = useState<any>(null);
 
   const isDragging = useRef(false);
   const dragStart = useRef({ x: 0, y: 0 });
@@ -70,60 +86,6 @@ export default function App() {
   const logicalTodayStr = useMemo(() => getLogicalDateStr(), []);
   const currentWeeklyMonday = useMemo(() => getWeeklyMonday(), []);
 
-  const syncUserFines = useCallback(async (currentStats: CharacterStats, userLogs: DailyLog[], currentMandatoryOption: string) => {
-    // Fetch all mandatory quest history
-    const { data: historyData } = await supabase.from('MandatoryQuestHistory').select('*');
-    const mandatoryHistoryMap = new Map<string, string>();
-    if (historyData) {
-      historyData.forEach((h: any) => {
-        mandatoryHistoryMap.set(getLogicalDateStr(h.effective_date), h.QuestID);
-      });
-    }
-
-    const dates: string[] = [];
-    const curr = new Date(`${BASE_START_DATE_STR}T12:00:00`);
-    const todayLogical = getLogicalDateStr();
-    let temp = new Date(curr);
-
-    while (true) {
-      const tempStr = getLogicalDateStr(temp);
-      dates.push(tempStr);
-      if (tempStr === todayLogical) break;
-      temp.setDate(temp.getDate() + 1);
-      if (dates.length > 3000) break; // sanity safeguard
-    }
-
-    // A map of dates to the user's completed quests on that date
-    const checkInMap = new Map<string, Set<string>>();
-    userLogs.forEach(l => {
-      if (l.QuestID.startsWith('q')) {
-        const dateStr = getLogicalDateStr(l.Timestamp);
-        if (!checkInMap.has(dateStr)) checkInMap.set(dateStr, new Set());
-        checkInMap.get(dateStr)!.add(l.QuestID);
-      }
-    });
-
-    let missedDatesCount = 0;
-
-    dates.forEach(dateStr => {
-      // Find what the mandatory quest was for this specific date
-      const requiredQuestId = mandatoryHistoryMap.get(dateStr) || currentMandatoryOption;
-
-      const userQuestsOnDate = checkInMap.get(dateStr);
-      // If the user did not check in at all, or did not complete the required quest for that date
-      if (!userQuestsOnDate || !userQuestsOnDate.has(requiredQuestId)) {
-        missedDatesCount++;
-      }
-    });
-
-    const calculatedFines = missedDatesCount * PENALTY_PER_DAY;
-
-    if (currentStats.TotalFines !== calculatedFines) {
-      await supabase.from('CharacterStats').update({ TotalFines: calculatedFines }).eq('UserID', currentStats.UserID);
-      return calculatedFines;
-    }
-    return currentStats.TotalFines;
-  }, []);
 
   const isTopicDone = useMemo(() =>
     logs.some(l => l.QuestID === 't1' && new Date(l.Timestamp) >= currentWeeklyMonday),
@@ -136,7 +98,12 @@ export default function App() {
     if (!info) return null;
     const isCuredToday = logs.some(l => l.QuestID === info.cureTaskId && getLogicalDateStr(l.Timestamp) === logicalTodayStr);
     return { ...info, isCursed: !isCuredToday };
+    return { ...info, isCursed: !isCuredToday };
   }, [userData, logs, logicalTodayStr]);
+
+  const todayCompletedQuestIds = useMemo(() => {
+    return logs.filter(l => getLogicalDateStr(l.Timestamp) === logicalTodayStr).map(l => l.QuestID);
+  }, [logs, logicalTodayStr]);
 
   const axialToPixelPos = useCallback((q: number, r: number, size: number) => axialToPixel(q, r, size), []);
 
@@ -147,6 +114,180 @@ export default function App() {
       setAdminAuth(true);
     } else {
       setModalMessage({ text: "密令錯誤，大會禁地不可擅闖。", type: 'error' });
+    }
+  };
+
+  const handleTriggerSnapshot = async () => {
+    if (!confirm("確定要執行『每週業力結算』(Weekly Snapshot)？\n這將重新計算所有活躍使用者的完成率，並變更全服動態難度 (WorldState)。")) return;
+    setIsSyncing(true);
+    try {
+      const res = await triggerWeeklySnapshot();
+      if (res.success) {
+        setSystemSettings(prev => ({
+          ...prev,
+          WorldState: res.worldState,
+          WorldStateMsg: res.message
+        }));
+        setModalMessage({ text: `結算完成！目前的共業狀態為：${res.message}`, type: 'success' });
+      } else {
+        setModalMessage({ text: "結算失敗: " + res.error, type: 'error' });
+      }
+    } catch (e: any) {
+      setModalMessage({ text: "系統異常：" + e.message, type: 'error' });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleImportRoster = async (csvData: string) => {
+    setIsSyncing(true);
+    try {
+      const res = await importRostersData(csvData);
+      if (res.success) {
+        setModalMessage({ text: `成功匯入！共新增/更新了 ${res.count} 筆名冊資料。`, type: 'success' });
+      } else {
+        setModalMessage({ text: `匯入失敗：${res.error}`, type: 'error' });
+      }
+    } catch (err: any) {
+      setModalMessage({ text: `系統異常：${err.message}`, type: 'error' });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleCheckW3Compliance = async () => {
+    if (!confirm("確定要執行『w3 週罰款結算』？\n本週未完成「自我精進課」(w3) 的修行者將被記 NT$200 罰金。")) return;
+    setIsSyncing(true);
+    try {
+      const res = await checkWeeklyW3Compliance();
+      if (res.success) {
+        const count = res.violatorCount ?? 0;
+        const names = res.violators?.map((v: { name: string }) => v.name).join('、') || '（無）';
+        setModalMessage({ text: `w3 結算完成！共 ${count} 人未達標，已記罰：${names}`, type: count > 0 ? 'error' : 'success' });
+      } else {
+        setModalMessage({ text: "結算失敗：" + res.error, type: 'error' });
+      }
+    } catch (e: any) {
+      setModalMessage({ text: "系統異常：" + e.message, type: 'error' });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleDrawWeeklyQuest = async () => {
+    if (!userData?.TeamName || !userData.IsCaptain) return;
+    setIsSyncing(true);
+    try {
+      const res = await drawWeeklyQuestForSquad(userData.TeamName, userData.UserID);
+      if (res.success) {
+        setTeamSettings((prev: any) => ({
+          ...prev,
+          mandatory_quest_id: res.questId,
+          mandatory_quest_week: res.weekLabel,
+          quest_draw_history: [...(prev?.quest_draw_history || []), res.questId],
+        }));
+        setModalMessage({ text: `本週推薦定課已抽出：「${res.questName}」`, type: 'success' });
+      } else {
+        setModalMessage({ text: res.error || '抽籤失敗', type: 'error' });
+      }
+    } catch (e: any) {
+      setModalMessage({ text: '系統異常：' + e.message, type: 'error' });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleAutoDrawAllSquads = async () => {
+    if (!confirm("確定要為所有本週尚未抽籤的小隊自動抽選推薦定課？")) return;
+    setIsSyncing(true);
+    try {
+      const res = await autoDrawAllSquads();
+      if (res.success) {
+        const summary = res.drawn?.map((d: { squadName: string; questName: string }) => `${d.squadName}→${d.questName}`).join('、') || '（無）';
+        setModalMessage({ text: `自動抽籤完成！${res.drawnCount} 個小隊已抽選，${res.skippedCount} 個已跳過。\n${summary}`, type: 'success' });
+      } else {
+        setModalMessage({ text: '自動抽籤失敗：' + res.error, type: 'error' });
+      }
+    } catch (e: any) {
+      setModalMessage({ text: '系統異常：' + e.message, type: 'error' });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleTriggerDivination = async () => {
+    if (!userData) return;
+    setIsSyncing(true);
+    setModalMessage({ text: "🔮 AI 觀因果推演中...", type: 'info' });
+    try {
+      const res = await generatePersonalizedEncounter(userData.UserID);
+      if (res.success && res.encounter) {
+        const { encounter } = res;
+
+        // Apply effect locally (it's not yet applied in DB by gemini.ts)
+        if (encounter.effect) {
+          const { statToModify, value } = encounter.effect;
+          setUserData(prev => {
+            if (!prev) return prev;
+            const newVal = (prev[statToModify as keyof CharacterStats] as number || 0) + value;
+            return { ...prev, [statToModify]: newVal };
+          });
+
+          // Also sync to DB
+          await supabase.from('CharacterStats').update({ [statToModify]: (userData[statToModify as keyof CharacterStats] as number || 0) + value }).eq('UserID', userData.UserID);
+        }
+
+        setModalMessage({
+          text: `🔮 因果啟示：【${encounter.encounterName}】\n\n${encounter.narrative}\n\n「${encounter.dialogue}」\n\n影響：${encounter.effect?.statToModify} ${encounter.effect?.value > 0 ? '+' : ''}${encounter.effect?.value}`,
+          type: 'success'
+        });
+      } else {
+        setModalMessage({ text: "因果蒙蔽，無法推演: " + res.error, type: 'error' });
+      }
+    } catch (e: any) {
+      setModalMessage({ text: "系統異常：" + e.message, type: 'error' });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleEntityTrigger = async (entity: any) => {
+    // Optimistic UI Removal
+    setMapEntities(prev => prev.filter(e => e.id !== entity.id));
+
+    setIsSyncing(true);
+    try {
+      // Consume in DB if it has an ID
+      if (entity.id) {
+        await supabase.from('MapEntities').update({ is_active: false }).eq('id', entity.id);
+      }
+
+      if (entity.type === 'personal') {
+        const enc = entity.data;
+        setModalMessage({
+          text: `✨ 【${enc.encounterName}】\n\n${enc.narrative}\n\n「${enc.dialogue}」\n\n(修為影響：${enc.effect?.statToModify} ${enc.effect?.value > 0 ? '+' : ''}${enc.effect?.value})`,
+          type: enc.effect?.value >= 0 ? 'success' : 'error'
+        });
+      } else if (entity.type === 'portal') {
+        // Validation already happened in WorldMap.tsx
+        setModalMessage({
+          text: `✨ 【歸心陣】\n\n業力清淨，陣法啟動！即將傳送回本心草原...`,
+          type: 'success'
+        });
+        // Wait a tiny bit then jump
+        setTimeout(() => {
+          handleMoveCharacter(0, 0, 0, 'center', 0);
+        }, 1500);
+      } else if (entity.type !== 'monster') {
+        setModalMessage({
+          text: `🎁 你發現了【${entity.name}】！\n「在這漫漫修行路上，天道給予了一份小驚喜。」\n(已自動拾取)`,
+          type: 'success'
+        });
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -164,20 +305,6 @@ export default function App() {
         }
       }
 
-      // If updating MandatoryQuestId, store a snapshot for exact days going forward
-      if (key === 'MandatoryQuestId') {
-        const todayLogical = getLogicalDateStr();
-        await supabase.from('MandatoryQuestHistory')
-          .upsert({ QuestID: value, effective_date: todayLogical }, { onConflict: 'effective_date' })
-          .select();
-
-        // Re-calculate user's own fines immediately if they are logged in
-        if (userData && logs) {
-          const newFines = await syncUserFines(userData, logs, value);
-          setUserData(prev => prev ? { ...prev, TotalFines: newFines } : null);
-        }
-      }
-
       setModalMessage({ text: "設定已同步雲端，諸位修行者將即時感應。", type: 'success' });
     } catch (err) {
       setModalMessage({ text: "同步失敗，法陣連線異常。", type: 'error' });
@@ -186,36 +313,155 @@ export default function App() {
     }
   };
 
-  const handleRollDice = () => {
+  const handleAddTempQuest = async (title: string, sub: string, desc: string, reward: number) => {
+    setIsSyncing(true);
+    try {
+      const id = `temp_${Date.now()}`;
+      const dbRow = { id, title, sub, desc, reward, limit_count: 1, active: true };
+      const { error } = await supabase.from('temporaryquests').insert([dbRow]);
+      if (error) throw error;
+      const newQuest: TemporaryQuest = { id, title, sub, desc, reward, limit: 1, active: true };
+      setTemporaryQuests(prev => [newQuest, ...prev]);
+    } catch (err) {
+      console.error(err);
+      setModalMessage({ text: "新增臨時任務失敗。", type: 'error' });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleToggleTempQuest = async (id: string, active: boolean) => {
+    setIsSyncing(true);
+    try {
+      const { error } = await supabase.from('temporaryquests').update({ active }).eq('id', id);
+      if (error) throw error;
+      setTemporaryQuests(prev => prev.map(q => q.id === id ? { ...q, active } : q));
+    } catch (err) {
+      setModalMessage({ text: "更新臨時任務狀態失敗。", type: 'error' });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleDeleteTempQuest = async (id: string) => {
+    if (!confirm("確定要刪除此臨時任務嗎？刪除後無法恢復。")) return;
+    setIsSyncing(true);
+    try {
+      const { error } = await supabase.from('temporaryquests').delete().eq('id', id);
+      if (error) throw error;
+      setTemporaryQuests(prev => prev.filter(q => q.id !== id));
+    } catch (err) {
+      setModalMessage({ text: "刪除臨時任務失敗。", type: 'error' });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const [showGoldenDicePicker, setShowGoldenDicePicker] = useState(false);
+
+  const handleRollDice = (amount: number = 1) => {
     if (!userData || isRolling || stepsRemaining > 0) return;
-    if (userData.EnergyDice <= 0) {
-      setModalMessage({ text: "能量骰子已耗盡，請完成定課以補充！", type: 'error' });
+
+    // Golden Dice Flow triggers number picker
+    if (amount === -1) {
+      if ((userData.GoldenDice || 0) < 1) {
+        setModalMessage({ text: "萬能奇蹟骰不足！", type: 'error' });
+        return;
+      }
+      setShowGoldenDicePicker(true);
+      return;
+    }
+
+
+    if (userData.EnergyDice < amount) {
+      setModalMessage({ text: "能量骰子不足！", type: 'error' });
       return;
     }
     setIsRolling(true);
     setTimeout(() => {
-      let roll = Math.floor(Math.random() * 6) + 1;
-      if (userData.Role === '白龍馬') roll += 2;
+      let roll = 0;
+      for (let i = 0; i < amount; i++) {
+        roll += Math.floor(Math.random() * 6) + 1;
+      }
+      if (userData.Role === '白龍馬') roll += 2 * amount;
       if (userData.Role === '唐三藏' && roleTrait?.isCursed) roll = Math.max(1, Math.floor(roll / 2));
+
+      // Apply multiplier
+      roll = roll * moveMultiplier;
+
       setStepsRemaining(roll);
+      setMoveMultiplier(1); // Reset after single use
       setIsRolling(false);
-      const newEnergy = userData.EnergyDice - 1;
-      setUserData({ ...userData, EnergyDice: newEnergy });
-      supabase.from('CharacterStats').update({ EnergyDice: newEnergy }).eq('UserID', userData.UserID);
+      const newDiceCount = userData.EnergyDice - amount;
+      setUserData({ ...userData, EnergyDice: newDiceCount });
+      supabase.from('CharacterStats').update({ EnergyDice: newDiceCount }).eq('UserID', userData.UserID);
       setModalMessage({ text: `修行法輪轉動完成！獲得步數：${roll}`, type: 'success' });
     }, 800);
   };
 
-  const handleMoveCharacter = async (q: number, r: number, dist: number) => {
+  const handleExecuteGoldenDice = async (steps: number) => {
+    if (!userData || (userData.GoldenDice || 0) < 1) return;
+
+    setShowGoldenDicePicker(false);
+    setIsRolling(true);
+
+    setTimeout(async () => {
+      const newGoldenCount = (userData.GoldenDice || 0) - 1;
+      setStepsRemaining(steps);
+      setUserData({ ...userData, GoldenDice: newGoldenCount });
+      setIsRolling(false);
+
+      await supabase.from('CharacterStats').update({ GoldenDice: newGoldenCount }).eq('UserID', userData.UserID);
+      setModalMessage({ text: `萬能奇蹟骰已發動！精準鎖定 ${steps} 步！`, type: 'success' });
+    }, 800);
+  };
+
+  const handleMoveCharacter = async (q: number, r: number, dist: number, zoneId?: string, newFacing?: number) => {
     if (!userData) return;
     setIsSyncing(true);
     try {
-      const { error } = await supabase.from('CharacterStats').update({ CurrentQ: q, CurrentR: r }).eq('UserID', userData.UserID);
+      let finalQ = q;
+      let finalR = r;
+      let remaining = Math.max(0, stepsRemaining - dist);
+      let penaltyText = "";
+      let newFines = userData.TotalFines;
+      let finalFacing = newFacing ?? userData.Facing ?? 0;
+
+      // 貪區 (慾望泥沼): 強制滯留，行動力歸零
+      if (zoneId === 'greed' && !todayCompletedQuestIds.includes('q6') && !todayCompletedQuestIds.includes('q7')) {
+        remaining = 0;
+        penaltyText = "你陷入了慾望泥沼，本回合行動力歸零！";
+      }
+
+      // 嗔區 (焦熱荒原): 熔岩灼傷，增加罰金 (修為受損)
+      if (zoneId === 'anger' && !todayCompletedQuestIds.includes('q1') && !todayCompletedQuestIds.includes('q2')) {
+        newFines += 50;
+        penaltyText = penaltyText ? penaltyText + " 且遭到焦熱熔岩灼傷，業力增加！" : "遭到焦熱熔岩灼傷，業力增加！";
+      }
+
+      // 痴區 (虛妄流沙): 回合結束且停留在該處時，發生隨機位移
+      if (remaining === 0 && zoneId === 'delusion' && !todayCompletedQuestIds.includes('q4')) {
+        const drift = [
+          { q: 1, r: -1 }, { q: 1, r: 0 }, { q: 0, r: 1 },
+          { q: -1, r: 1 }, { q: -1, r: 0 }, { q: 0, r: -1 }
+        ];
+        const rand = drift[Math.floor(Math.random() * drift.length)];
+        finalQ += rand.q;
+        finalR += rand.r;
+        penaltyText = penaltyText ? penaltyText + " 並在虛妄流沙中迷失方向！" : "在虛妄流沙中迷失方向，發生強制位移！";
+      }
+
+      const { error } = await supabase.from('CharacterStats')
+        .update({ CurrentQ: finalQ, CurrentR: finalR, TotalFines: newFines, Facing: finalFacing })
+        .eq('UserID', userData.UserID);
       if (error) throw error;
-      setUserData({ ...userData, CurrentQ: q, CurrentR: r });
-      setStepsRemaining(prev => Math.max(0, prev - dist));
-      const pos = axialToPixelPos(q, r, DEFAULT_CONFIG.HEX_SIZE_WORLD);
-      setCamX(pos.x); setCamY(pos.y);
+
+      setUserData({ ...userData, CurrentQ: finalQ, CurrentR: finalR, TotalFines: newFines, Facing: finalFacing });
+      setStepsRemaining(remaining);
+
+      if (penaltyText) {
+        setModalMessage({ text: penaltyText, type: 'error' });
+      }
     } catch (err) {
       setModalMessage({ text: "移動失敗，法陣傳送受阻。", type: 'error' });
     } finally {
@@ -238,13 +484,11 @@ export default function App() {
     try {
       const res = await processCheckInTransaction(userData.UserID, quest.id, quest.title, quest.reward, quest.dice);
 
-      if (res.success) {
+      if (res.success && res.user) {
         const { data: newLogs } = await supabase.from('DailyLogs').select('*').eq('UserID', userData.UserID);
         const updatedLogs = (newLogs as DailyLog[]) || [];
-        const finalFines = await syncUserFines(res.user as CharacterStats, updatedLogs, systemSettings.MandatoryQuestId);
-
+        setUserData(res.user as CharacterStats);
         setLogs(updatedLogs);
-        setUserData({ ...(res.user as CharacterStats), TotalFines: finalFines });
         setModalMessage({ text: "修為提升，法喜充滿！", type: 'success' });
       } else {
         setModalMessage({ text: res.error || "記錄失敗，靈通中斷。", type: 'error' });
@@ -283,13 +527,28 @@ export default function App() {
       await supabase.from('CharacterStats').update(update).eq('UserID', userData.UserID);
       const { data: newLogs } = await supabase.from('DailyLogs').select('*').eq('UserID', userData.UserID);
       const updatedLogs = (newLogs as DailyLog[]) || [];
-      const finalFines = await syncUserFines({ ...userData, ...update } as CharacterStats, updatedLogs, systemSettings.MandatoryQuestId);
 
       setLogs(updatedLogs);
-      setUserData({ ...userData, ...update, TotalFines: finalFines } as CharacterStats);
+      setUserData({ ...userData, ...update } as CharacterStats);
       setUndoTarget(null);
       setModalMessage({ text: "時光回溯成功，心識已歸位。", type: 'success' });
     } catch (err) { setModalMessage({ text: "回溯失敗，業力阻擋。", type: 'error' }); } finally { setIsSyncing(false); }
+  };
+
+  const handlePurchaseSuccess = async () => {
+    // Re-fetch user and team data to update UI Coins & Inventory
+    if (!userData) return;
+    try {
+      const { data: stats } = await supabase.from('CharacterStats').select('*').eq('UserID', userData.UserID).single();
+      if (stats) setUserData(prev => ({ ...prev, ...stats }));
+
+      if (userData.TeamName) {
+        const { data: tSettings } = await supabase.from('TeamSettings').select('*').eq('team_name', userData.TeamName).single();
+        if (tSettings) setTeamSettings(tSettings);
+      }
+    } catch (e) {
+      console.error("Failed to refresh store data", e);
+    }
   };
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -305,30 +564,90 @@ export default function App() {
         sessionStorage.setItem('starry_session_uid', match.UserID);
         const { data: userLogs } = await supabase.from('DailyLogs').select('*').eq('UserID', match.UserID);
         const logsArray = (userLogs as DailyLog[]) || [];
-        const updatedFines = await syncUserFines(match, logsArray, systemSettings.MandatoryQuestId);
-        setUserData({ ...match, TotalFines: updatedFines });
+
+        if (match.TeamName) {
+          const { data: ts } = await supabase.from('TeamSettings').select('*').eq('team_name', match.TeamName).single();
+          if (ts) setTeamSettings(ts);
+        }
+
+        setUserData(match);
         setLogs(logsArray);
         setView('app');
       } else { setModalMessage({ text: "查無此修行者印記。", type: 'error' }); }
     } catch (err) { setModalMessage({ text: "靈通感應異常。", type: 'error' }); } finally { setIsSyncing(false); }
   };
 
-  const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const handleRegisterInput = (data: any) => {
+    // Check fortunes evaluation
+    const evalRes = evaluateFate(data.fortunes);
+    if (evalRes.isTie) {
+      setTieBreakData({ ...data, evalRes });
+    } else {
+      executeRegisterFlow({ ...data, assignedRole: evalRes.assignedRole, lowestScore: evalRes.lowestScore });
+    }
+  };
+
+  const executeRegisterFlow = async (data: any) => {
     setIsSyncing(true);
-    const fd = new FormData(e.currentTarget);
-    const name = (fd.get('name') as string).trim();
-    const phoneRaw = (fd.get('phone') as string);
+    const { name, phone: phoneRaw, email: emailRaw, fortunes, assignedRole, lowestScore } = data;
+    const email = emailRaw?.trim()?.toLowerCase();
     const phone = standardizePhone(phoneRaw);
-    const roles = Object.keys(ROLE_CURE_MAP);
-    const assignedRole = roles[Math.floor(Math.random() * roles.length)];
-    const newChar: CharacterStats = { UserID: phone, Name: name, Role: assignedRole, Level: 1, Exp: 0, EnergyDice: 3, Savvy: 10, Luck: 10, Charisma: 10, Spirit: 10, Physique: 10, Potential: 10, Streak: 0, LastCheckIn: null, TotalFines: 0, CurrentQ: 0, CurrentR: 0 };
+
+    // Default Starting Values
+    let newLevel = 1;
+    let newExp = 0;
+    let newDice = 3;
+    let newInventory: string[] = [];
+    let ddaDiff = 'Normal';
+    let welcomeMessage = `天命已定！您的守護角色為【${assignedRole}】。`;
+
+    // Apply Compensation Logic
+    if (lowestScore >= 1 && lowestScore <= 3) {
+      newExp = 1970; // Equivalent to Level 5 approx
+      newLevel = 5;
+      newInventory.push('t_shield_3d'); // 假裝送個限時道具
+      welcomeMessage += `\n星象顯示您正處於極大的考驗中。佛祖特賜您「開局修為加成 (Lv.5)」與「新手防禦罩」，請務必堅持每日定課，逆轉命運！`;
+    } else if (lowestScore >= 4 && lowestScore <= 7) {
+      newDice = 5; // Extra 2 dice
+      welcomeMessage += `\n您的運勢正在十字路口，藉由本次親證班的定課，您將能突破現有的瓶頸。系統已額外補給 2 顆能量骰子。`;
+    } else if (lowestScore >= 8 && lowestScore <= 10) {
+      ddaDiff = 'Hard';
+      welcomeMessage += `\n您的現實狀態極佳！系統已自動切換「菁英模式」，準備迎接更高強度的試煉吧！`;
+    }
+
+    const newChar: any = {
+      UserID: phone, Name: name.trim(), Role: assignedRole,
+      Level: newLevel, Exp: newExp, Coins: 0, Inventory: newInventory, EnergyDice: newDice,
+      Savvy: 10, Luck: 10, Charisma: 10, Spirit: 10, Physique: 10, Potential: 10,
+      Streak: 0, LastCheckIn: null, TotalFines: 0, CurrentQ: 0, CurrentR: 0,
+      Email: email, InitialFortunes: fortunes, DDA_Difficulty: ddaDiff
+    };
+
     try {
+      if (email) {
+        const { data: rosterMatch } = await supabase.from('Rosters').select('*').eq('email', email).single();
+        if (rosterMatch) {
+          newChar.SquadName = rosterMatch.squad_name;
+          newChar.TeamName = rosterMatch.team_name;
+          newChar.IsCaptain = rosterMatch.is_captain;
+        }
+      }
+
       await supabase.from('CharacterStats').insert([newChar]);
       sessionStorage.setItem('starry_session_uid', newChar.UserID);
       setUserData(newChar);
+      setModalMessage({ text: welcomeMessage, type: 'success' });
       setView('app');
-    } catch (err) { setModalMessage({ text: "轉生受阻。", type: 'error' }); } finally { setIsSyncing(false); }
+    } catch (err) {
+      setModalMessage({ text: "轉生受阻。可能該手機號碼已經註冊落籍。", type: 'error' });
+    } finally {
+      setIsSyncing(false);
+      setTieBreakData(null);
+    }
+  };
+
+  const handleTieBreakSelect = (role: string) => {
+    executeRegisterFlow({ ...tieBreakData, assignedRole: role, lowestScore: tieBreakData.evalRes.lowestScore });
   };
 
   const handleStartAdventure = () => {
@@ -336,69 +655,74 @@ export default function App() {
       setModalMessage({ text: `能量不足！啟動需要 ${ADVENTURE_COST} 顆骰子。`, type: 'error' });
       return;
     }
-    setView('map'); setCamX(0); setCamY(0);
+    setView('map');
   };
 
   const handleLogout = () => { sessionStorage.removeItem('starry_session_uid'); setUserData(null); setView('login'); };
 
-  const handleMapMouseDown = (e: React.MouseEvent) => {
-    isDragging.current = true;
-    dragStart.current = { x: e.clientX, y: e.clientY };
-  };
-  const handleMapMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging.current) return;
-    const dx = dragStart.current.x - e.clientX;
-    const dy = dragStart.current.y - e.clientY;
-    setCamX(prev => prev + dx * 2);
-    setCamY(prev => prev + dy * 2);
-    dragStart.current = { x: e.clientX, y: e.clientY };
-  };
-  const handleMapMouseUp = () => { isDragging.current = false; };
-
-  const worldGrid = useMemo(() => {
-    const hexes: HexData[] = [];
-    getHexRegion(DEFAULT_CONFIG.CENTER_SIDE - 1).forEach(p => {
-      const pos = axialToPixelPos(p.q, p.r, DEFAULT_CONFIG.HEX_SIZE_WORLD);
-      const key = `center_0_${p.q},${p.r}`;
-      const terrainId = mapData[key] || 'grass';
-      hexes.push({ ...p, ...pos, type: 'center', terrainId, color: TERRAIN_TYPES[terrainId]?.color || '#1a472a', key });
-    });
-    return hexes;
-  }, [mapData, axialToPixelPos]);
-
-  const visibleGrid = useMemo(() => {
-    if (view !== 'map') return worldGrid;
-    const margin = 1500;
-    return worldGrid.filter(h => h.x >= camX - margin && h.x <= camX + margin && h.y >= camY - margin && h.y <= camY + margin);
-  }, [worldGrid, view, camX, camY]);
-
-  const renderHexNodeInner = useCallback((hex: HexData, size: number) => {
-    const isHovered = hoveredHex === hex.key;
-    const isMovable = view === 'map' && stepsRemaining > 0 && userData && getHexDist(userData.CurrentQ, userData.CurrentR, hex.q, hex.r) <= stepsRemaining;
-
-    return (
-      <g key={hex.key} onMouseEnter={() => setHoveredHex(hex.key)} onMouseLeave={() => setHoveredHex(null)} onClick={() => handleHexClick(hex.q, hex.r)}>
-        <polygon points={getHexPointsStr(hex.x, hex.y, size * 1.01)} fill={isMovable ? "rgba(16, 185, 129, 0.4)" : hex.color} stroke={isHovered ? "white" : "rgba(255,255,255,0.02)"} strokeWidth="1" className="cursor-pointer transition-all duration-300" />
-      </g>
-    );
-  }, [view, hoveredHex, stepsRemaining, userData, handleHexClick]);
-
   useEffect(() => {
     const init = async () => {
+      // Fetch map data
+      const { data: mapWorldData } = await supabase.from('world_maps').select('data').eq('id', 'main_world_map').single();
+      if (mapWorldData && mapWorldData.data) {
+        const fetchedData = mapWorldData.data as { terrain?: Record<string, string>, config?: { corridorL: number, corridorW: number } };
+        setMapData(fetchedData.terrain || {});
+        if (fetchedData.config) {
+          setCorridorL(fetchedData.config.corridorL || DEFAULT_CONFIG.CORRIDOR_L);
+          setCorridorW(fetchedData.config.corridorW || DEFAULT_CONFIG.CORRIDOR_W);
+        }
+      }
+
       // Always try to fetch setting early to populate UI
-      let fetchedSettings: any = {};
       const { data: settingsData } = await supabase.from('SystemSettings').select('*');
       if (settingsData) {
         const sObj = settingsData.reduce((acc: any, curr: any) => ({ ...acc, [curr.SettingName]: curr.Value }), {});
-        fetchedSettings = sObj;
         setSystemSettings({
-          MandatoryQuestId: sObj.MandatoryQuestId || 'q2',
           TopicQuestTitle: sObj.TopicQuestTitle || '修行主題載入中'
         });
       }
 
       const { data: historyData } = await supabase.from('TopicHistory').select('*').order('created_at', { ascending: false });
       if (historyData) setTopicHistory(historyData as TopicHistory[]);
+
+      const { data: tempQuestsData } = await supabase.from('temporaryquests').select('*').order('created_at', { ascending: false });
+      if (tempQuestsData) {
+        const parsed = tempQuestsData.map((t: any) => ({ ...t, limit: t.limit_count }));
+        setTemporaryQuests(parsed as TemporaryQuest[]);
+      }
+
+      try {
+        const { data: pEntities, error: entErr } = await supabase.from('MapEntities').select('*').eq('is_active', true);
+        if (pEntities && !entErr) {
+          setMapEntities(pEntities);
+        }
+      } catch (e) {
+        console.error("Error fetching map entities:", e);
+      }
+
+      // Fetch teammates' positions for map interaction
+      const fetchTeammates = async (teamName: string, selfId: string) => {
+        try {
+          const { data: mates } = await supabase
+            .from('CharacterStats')
+            .select('UserID, Name, Role, CurrentQ, CurrentR, EnergyDice, Level')
+            .eq('TeamName', teamName)
+            .neq('UserID', selfId);
+          if (mates && mates.length > 0) {
+            const teammateEntities = mates.map((m: any) => ({
+              id: `teammate_${m.UserID}`,
+              q: m.CurrentQ,
+              r: m.CurrentR,
+              type: 'teammate',
+              icon: ROLE_CURE_MAP[m.Role]?.avatar || '👤',
+              name: m.Name || m.UserID,
+              is_active: true,
+              data: { userId: m.UserID, role: m.Role, level: m.Level, dice: m.EnergyDice }
+            }));
+            setMapEntities(prev => [...prev, ...teammateEntities]);
+          }
+        } catch (_) { /* non-critical */ }
+      };
 
       const savedUid = sessionStorage.getItem('starry_session_uid');
       if (savedUid && !userData) {
@@ -407,18 +731,23 @@ export default function App() {
           const { data: userLogs } = await supabase.from('DailyLogs').select('*').eq('UserID', stats.UserID);
           const logsArray = (userLogs as DailyLog[]) || [];
 
-          // Fallback to the fetched setting if it exists, else default
-          const fallbackMandatory = fetchedSettings?.MandatoryQuestId || 'q2';
-          const updatedFines = await syncUserFines(stats as CharacterStats, logsArray, fallbackMandatory);
+          // Fetch TeamSettings if User belongs to a Team
+          if (stats.TeamName) {
+            const { data: tSettings } = await supabase.from('TeamSettings').select('*').eq('team_name', stats.TeamName).single();
+            if (tSettings) setTeamSettings(tSettings);
+            const { count } = await supabase.from('CharacterStats').select('*', { count: 'exact', head: true }).eq('TeamName', stats.TeamName);
+            setTeamMemberCount(count || 1);
+            await fetchTeammates(stats.TeamName, stats.UserID);
+          }
 
-          setUserData({ ...stats, TotalFines: updatedFines } as CharacterStats);
+          setUserData(stats as CharacterStats);
           setLogs(logsArray);
           setView('app');
         } else { setView('login'); }
       } else if (!savedUid) { setView('login'); }
     };
     init();
-  }, [syncUserFines, userData]);
+  }, [userData]);
 
   useEffect(() => {
     const fetchRank = async () => {
@@ -428,59 +757,6 @@ export default function App() {
     if (activeTab === 'rank' || view === 'admin') fetchRank();
   }, [activeTab, view]);
 
-  const MapView = () => {
-    const playerPixel = useMemo(() => {
-      if (!userData) return { x: 0, y: 0 };
-      return axialToPixelPos(userData.CurrentQ, userData.CurrentR, DEFAULT_CONFIG.HEX_SIZE_WORLD);
-    }, [userData]);
-    return (
-      <div className="min-h-screen bg-slate-950 flex flex-col overflow-hidden relative animate-in fade-in">
-        <header className="p-6 bg-slate-900 border-b border-white/10 flex justify-between items-center z-10 text-center">
-          <div className="flex items-center gap-3 text-center justify-center">
-            <div className="p-3 bg-orange-600 rounded-2xl text-white shadow-lg"><MapIcon size={20} /></div>
-            <div className="text-left text-white font-black text-xl italic">修行世界觀測中</div>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={handleRollDice} disabled={isRolling || stepsRemaining > 0} className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-black transition-all shadow-xl active:scale-95 ${stepsRemaining > 0 ? 'bg-slate-800 text-slate-500' : 'bg-orange-600 text-white hover:bg-orange-500'}`}>
-              {isRolling ? <Loader2 size={16} className="animate-spin" /> : <Dice5 size={16} />} 轉法輪
-            </button>
-            <button onClick={() => setView('app')} className="flex items-center gap-2 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-black rounded-2xl transition-all border border-white/10 shadow-xl active:scale-95"><ChevronLeft size={16} /> 返回修行</button>
-          </div>
-        </header>
-
-        <main
-          className="flex-1 bg-black overflow-hidden relative cursor-grab active:cursor-grabbing text-center justify-center mx-auto w-full flex"
-          onMouseDown={handleMapMouseDown}
-          onMouseMove={handleMapMouseMove}
-          onMouseUp={handleMapMouseUp}
-          onMouseLeave={handleMapMouseUp}
-        >
-          <svg viewBox={`${camX - 800} ${camY - 800} 1600 1600`} className="w-full h-full select-none mx-auto transition-none">
-            <defs><radialGradient id="mapFog"><stop offset="60%" stopColor="transparent" /><stop offset="100%" stopColor="black" stopOpacity="0.8" /></radialGradient></defs>
-            <g>
-              {visibleGrid.map(hex => renderHexNodeInner(hex, DEFAULT_CONFIG.HEX_SIZE_WORLD))}
-              {userData && (
-                <g transform={`translate(${playerPixel.x}, ${playerPixel.y})`}>
-                  <circle r="12" fill="white" className="animate-pulse opacity-20" />
-                  <circle r="8" fill="#ea580c" stroke="white" strokeWidth="2" />
-                  <text y="5" textAnchor="middle" fontSize="12" className="select-none pointer-events-none">{ROLE_CURE_MAP[userData.Role]?.avatar || '👤'}</text>
-                  <text y="22" textAnchor="middle" fontSize="8" fontWeight="bold" fill="white" className="drop-shadow-md">{userData.Name}</text>
-                </g>
-              )}
-            </g>
-            <rect x={camX - 800} y={camY - 800} width="1600" height="1600" fill="url(#mapFog)" pointerEvents="none" />
-          </svg>
-
-          <div className="absolute top-8 left-8 bg-slate-900/80 p-4 rounded-2xl border border-white/10 backdrop-blur-md">
-            <div className="flex items-center gap-2 text-emerald-400 font-black text-xs uppercase tracking-widest text-left">
-              <Footprints size={14} /> 靈體位置：({userData?.CurrentQ}, {userData?.CurrentR})
-            </div>
-          </div>
-        </main>
-      </div>
-    );
-  };
-
   const HomeView = () => (
     <div className="min-h-screen bg-slate-950 text-slate-200 pb-40 text-center animate-in fade-in">
       <Header userData={userData} onLogout={handleLogout} />
@@ -488,16 +764,21 @@ export default function App() {
       <nav className="sticky top-0 z-20 bg-slate-950/90 backdrop-blur-md flex p-4 gap-2 border-b border-white/5 shadow-xl overflow-x-auto no-scrollbar justify-center">
         <button onClick={() => setActiveTab('daily')} className={`shrink-0 px-6 py-4 rounded-2xl text-xs font-black transition-all ${activeTab === 'daily' ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/20' : 'bg-slate-900 text-slate-500'}`}>修行定課</button>
         <button onClick={() => setActiveTab('weekly')} className={`shrink-0 px-6 py-4 rounded-2xl text-xs font-black transition-all ${activeTab === 'weekly' ? 'bg-orange-600 text-white shadow-lg' : 'bg-slate-900 text-slate-50'}`}>加分副本</button>
+        <button onClick={() => setActiveTab('shop')} className={`shrink-0 px-6 py-4 rounded-2xl text-xs font-black transition-all ${activeTab === 'shop' ? 'bg-yellow-600 text-white shadow-lg shadow-yellow-600/20' : 'bg-slate-900 text-slate-50'}`}>🏪藏寶閣</button>
         <button onClick={() => setActiveTab('rank')} className={`shrink-0 px-6 py-4 rounded-2xl text-xs font-black transition-all ${activeTab === 'rank' ? 'bg-orange-600 text-white shadow-lg' : 'bg-slate-900 text-slate-50'}`}>修為榜</button>
         <button onClick={() => setActiveTab('stats')} className={`shrink-0 px-6 py-4 rounded-2xl text-xs font-black transition-all ${activeTab === 'stats' ? 'bg-orange-600 text-white shadow-lg' : 'bg-slate-900 text-slate-50'}`}>六維與罰金</button>
+        {userData?.IsCaptain && (
+          <button onClick={() => setActiveTab('captain')} className={`shrink-0 px-6 py-4 rounded-2xl text-xs font-black transition-all ${activeTab === 'captain' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'bg-slate-900 text-slate-50'}`}>👩‍✈️指揮所</button>
+        )}
       </nav>
 
       <main className="max-w-md mx-auto p-6 space-y-8">
         {activeTab === 'daily' && (
           <DailyQuestsTab
-            systemSettings={systemSettings}
+            weeklyQuestId={teamSettings?.mandatory_quest_id}
             logs={logs}
             logicalTodayStr={logicalTodayStr}
+            userInventory={typeof userData?.Inventory === 'string' ? JSON.parse(userData.Inventory) : (userData?.Inventory || [])}
             onCheckIn={handleCheckInAction}
             onUndo={setUndoTarget}
             formatCheckInTime={formatCheckInTime}
@@ -509,12 +790,30 @@ export default function App() {
             logs={logs}
             currentWeeklyMonday={currentWeeklyMonday}
             isTopicDone={isTopicDone}
+            temporaryQuests={temporaryQuests.filter(t => t.active)}
+            userInventory={typeof userData?.Inventory === 'string' ? JSON.parse(userData.Inventory) : (userData?.Inventory || [])}
             onCheckIn={handleCheckInAction}
             onUndo={setUndoTarget}
           />
         )}
-        {activeTab === 'rank' && <RankTab leaderboard={leaderboard} />}
+        {activeTab === 'rank' && <RankTab leaderboard={leaderboard} currentUserId={userData?.UserID} />}
         {activeTab === 'stats' && userData && <StatsTab userData={userData} roleTrait={roleTrait} />}
+        {activeTab === 'shop' && userData && (
+          <ShopTab
+            userData={userData}
+            teamSettings={teamSettings}
+            teamMemberCount={teamMemberCount}
+            onPurchaseSuccess={handlePurchaseSuccess}
+            onShowMessage={(msg, type) => setModalMessage({ text: msg, type })}
+          />
+        )}
+        {activeTab === 'captain' && userData?.IsCaptain && (
+          <CaptainTab
+            teamName={userData.TeamName || '未編組'}
+            teamSettings={teamSettings}
+            onDrawWeeklyQuest={handleDrawWeeklyQuest}
+          />
+        )}
       </main>
 
       <footer className="fixed bottom-0 left-0 right-0 p-10 bg-gradient-to-t from-slate-950 via-slate-950 to-transparent pointer-events-none z-30 flex justify-center text-center mx-auto">
@@ -548,20 +847,35 @@ export default function App() {
       )}
 
       {view === 'register' && (
-        <div className="min-h-screen bg-slate-950 p-8 text-slate-200 text-center flex flex-col items-center justify-center">
-          <div className="max-w-md w-full space-y-10 animate-in slide-in-from-bottom-8 duration-500 text-center mx-auto">
-            <header className="space-y-4 text-center mx-auto">
-              <div className="w-20 h-20 bg-yellow-500 rounded-3xl mx-auto flex items-center justify-center shadow-xl text-slate-950 text-center mx-auto"><Sparkles size={40} /></div>
-              <h1 className="text-4xl font-black text-white text-center mx-auto">啟動轉生儀式</h1>
-            </header>
-            <form onSubmit={handleRegister} className="space-y-8 text-center mx-auto">
-              <div className="space-y-4 text-center mx-auto">
-                <input name="name" required className="w-full bg-slate-900 border-2 border-white/5 rounded-2xl p-5 text-white text-center outline-none focus:border-orange-500 font-bold text-center mx-auto" placeholder="真實姓名" />
-                <input name="phone" required type="tel" className="w-full bg-slate-900 border-2 border-white/5 rounded-2xl p-5 text-white text-center outline-none focus:border-orange-500 font-bold text-center mx-auto" placeholder="手機號碼 (用於唯一ID)" />
-              </div>
-              <button disabled={isSyncing} className="w-full py-6 rounded-4xl bg-orange-600 text-white font-black text-xl shadow-2xl flex items-center justify-center gap-3 active:scale-95 transition-all text-center mx-auto">確認轉生 <ArrowRight size={24} /></button>
-              <button type="button" onClick={() => setView('login')} className="text-slate-500 text-sm font-bold">返回登入</button>
-            </form>
+        <RegisterForm
+          onRegister={handleRegisterInput}
+          onGoToLogin={() => setView('login')}
+          isSyncing={isSyncing}
+        />
+      )}
+
+      {/* Tie Break Modal Overlay */}
+      {tieBreakData && (
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-6 bg-slate-950/95 backdrop-blur-md animate-in fade-in zoom-in duration-300">
+          <div className="bg-slate-900 border-2 border-indigo-500/30 p-8 rounded-[2.5rem] shadow-2xl max-w-sm w-full space-y-6">
+            <div className="text-center space-y-2">
+              <h2 className="text-2xl font-black text-white">天命抉擇</h2>
+              <p className="text-sm text-indigo-400 font-bold leading-relaxed">
+                五運輪盤顯示，您在多個領域遇到同等強烈的考驗。<br />請選出您此次最渴望跨越的難關：
+              </p>
+            </div>
+            <div className="space-y-3">
+              {tieBreakData.evalRes.tieOptions.map((opt: string) => (
+                <button
+                  key={opt}
+                  onClick={() => handleTieBreakSelect(opt)}
+                  disabled={isSyncing}
+                  className="w-full py-4 bg-slate-800 hover:bg-indigo-600 text-white font-black rounded-2xl transition-colors disabled:opacity-50"
+                >
+                  選擇化身為【{opt}】
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -574,12 +888,82 @@ export default function App() {
           updateGlobalSetting={updateGlobalSetting}
           leaderboard={leaderboard}
           topicHistory={topicHistory}
+          temporaryQuests={temporaryQuests}
+          onAddTempQuest={handleAddTempQuest}
+          onToggleTempQuest={handleToggleTempQuest}
+          onDeleteTempQuest={handleDeleteTempQuest}
+          onTriggerSnapshot={handleTriggerSnapshot}
+          onCheckW3Compliance={handleCheckW3Compliance}
+          onAutoDrawAllSquads={handleAutoDrawAllSquads}
+          onImportRoster={handleImportRoster}
           onClose={() => setView('login')}
         />
       )}
 
       {view === 'app' && <HomeView />}
-      {view === 'map' && <MapView />}
+      {view === 'map' && userData && (
+        <WorldMap
+          userData={userData}
+          mapData={mapData}
+          corridorL={corridorL}
+          corridorW={corridorW}
+          stepsRemaining={stepsRemaining}
+          moveMultiplier={moveMultiplier}
+          onUpdateMultiplier={setMoveMultiplier}
+          isRolling={isRolling}
+          onRollDice={handleRollDice}
+          onMoveCharacter={handleMoveCharacter}
+          onBack={() => setView('app')}
+          initialQ={userData.CurrentQ}
+          initialR={userData.CurrentR}
+          roleTrait={roleTrait}
+          todayCompletedQuestIds={todayCompletedQuestIds}
+          onShowMessage={(msg, type) => setModalMessage({ text: msg, type })}
+          onTriggerDivination={handleTriggerDivination}
+          dbEntities={mapEntities}
+          worldState={systemSettings.WorldState}
+          onEntityTrigger={handleEntityTrigger}
+          onUpdateUserData={(data) => {
+            if ((data as any).removeEntityId) {
+              setMapEntities(prev => prev.filter(e => e.id !== (data as any).removeEntityId));
+            }
+            setUserData(prev => prev ? { ...prev, ...data } : null);
+          }}
+          onUpdateSteps={setStepsRemaining}
+        />
+      )}
+
+      {showGoldenDicePicker && (
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center p-6 bg-slate-950/95 backdrop-blur-xl animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-yellow-500/30 p-8 rounded-[2.5rem] shadow-[0_0_50px_rgba(234,179,8,0.2)] max-w-sm w-full text-center space-y-6">
+            <div className="text-center space-y-2">
+              <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-br from-yellow-300 to-amber-600">🌟 萬能奇蹟骰</h2>
+              <p className="text-sm text-yellow-600/80 font-bold leading-relaxed">
+                指定您的下一步。慎重選擇落點。
+              </p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              {[1, 2, 3, 4, 5, 6].map(num => (
+                <button
+                  key={num}
+                  onClick={() => handleExecuteGoldenDice(num)}
+                  className="aspect-square flex items-center justify-center text-3xl font-black rounded-2xl bg-slate-800 border border-slate-700 hover:bg-yellow-500 hover:text-black hover:border-yellow-400 active:scale-95 transition-all text-slate-300"
+                >
+                  {num}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setShowGoldenDicePicker(false)}
+              className="w-full py-4 text-slate-500 font-bold hover:text-slate-300 transition-colors"
+            >
+              取消
+            </button>
+          </div>
+        </div>
+      )}
 
       {undoTarget && (
         <div className="fixed inset-0 z-[1200] flex items-center justify-center p-6 bg-slate-950/95 backdrop-blur-xl animate-in fade-in duration-200 text-center mx-auto">
