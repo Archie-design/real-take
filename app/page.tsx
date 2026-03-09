@@ -8,10 +8,10 @@ import {
   Dice5, Footprints, Loader2, RotateCcw, UserPlus, ArrowRight, Plus, Minus
 } from 'lucide-react';
 
-import { CharacterStats, DailyLog, Quest, SystemSettings, HexData, TopicHistory, TemporaryQuest } from '@/types';
+import { CharacterStats, DailyLog, Quest, SystemSettings, HexData, TopicHistory, TemporaryQuest, W4Application, AdminLog } from '@/types';
 import { getLogicalDateStr, getWeeklyMonday } from '@/lib/utils/time';
 import { standardizePhone } from '@/lib/utils/phone';
-import { ROLE_CURE_MAP, DEFAULT_CONFIG, ADVENTURE_COST, ADMIN_PASSWORD } from '@/lib/constants';
+import { ROLE_CURE_MAP, DEFAULT_CONFIG, ADVENTURE_COST, ADMIN_PASSWORD, calculateLevelFromExp, ROLE_GROWTH_RATES } from '@/lib/constants';
 import { axialToPixel, getHexPointsStr, getHexRegion, getHexDist, axialToPixelPos } from '@/lib/utils/hex';
 import { WorldMap } from '@/components/Map/WorldMap';
 
@@ -26,8 +26,9 @@ import { CaptainTab } from '@/components/Tabs/CaptainTab';
 import { ShopTab } from '@/components/Tabs/ShopTab';
 import { AdminDashboard } from '@/components/Admin/AdminDashboard';
 import { processCheckInTransaction } from '@/app/actions/quest';
-import { triggerWeeklySnapshot, importRostersData, checkWeeklyW3Compliance } from '@/app/actions/admin';
+import { triggerWeeklySnapshot, importRostersData, checkWeeklyW3Compliance, autoAssignSquadsForTesting, logAdminAction } from '@/app/actions/admin';
 import { drawWeeklyQuestForSquad, autoDrawAllSquads } from '@/app/actions/team';
+import { submitW4Application, reviewW4BySquadLeader, reviewW4ByAdmin, getW4Applications, getAdminActivityLog } from '@/app/actions/w4';
 import { generatePersonalizedEncounter } from '@/app/actions/gemini';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -74,6 +75,10 @@ export default function App() {
   const [moveMultiplier, setMoveMultiplier] = useState(1);
   const [isRolling, setIsRolling] = useState(false);
   const [personalEncounter, setPersonalEncounter] = useState<any>(null);
+  const [w4Applications, setW4Applications] = useState<W4Application[]>([]);
+  const [pendingW4Apps, setPendingW4Apps] = useState<W4Application[]>([]);
+  const [squadApprovedW4Apps, setSquadApprovedW4Apps] = useState<W4Application[]>([]);
+  const [adminLogs, setAdminLogs] = useState<AdminLog[]>([]);
 
   const isDragging = useRef(false);
   const dragStart = useRef({ x: 0, y: 0 });
@@ -107,11 +112,18 @@ export default function App() {
 
   const axialToPixelPos = useCallback((q: number, r: number, size: number) => axialToPixel(q, r, size), []);
 
-  const handleAdminAuth = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleAdminAuth = async (e: { preventDefault: () => void; currentTarget: HTMLFormElement }) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     if (fd.get('password') === ADMIN_PASSWORD) {
       setAdminAuth(true);
+      // Fetch admin data on auth
+      const [w4Res, logsRes] = await Promise.all([
+        getW4Applications({ status: 'squad_approved' }),
+        getAdminActivityLog(30),
+      ]);
+      if (w4Res.success) setSquadApprovedW4Apps(w4Res.applications);
+      if (logsRes.success) setAdminLogs(logsRes.logs as AdminLog[]);
     } else {
       setModalMessage({ text: "密令錯誤，大會禁地不可擅闖。", type: 'error' });
     }
@@ -189,6 +201,23 @@ export default function App() {
         setModalMessage({ text: `本週推薦定課已抽出：「${res.questName}」`, type: 'success' });
       } else {
         setModalMessage({ text: res.error || '抽籤失敗', type: 'error' });
+      }
+    } catch (e: any) {
+      setModalMessage({ text: '系統異常：' + e.message, type: 'error' });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleAutoAssignSquads = async () => {
+    if (!confirm("確定要將所有玩家隨機分配大隊 / 小隊？（每隊 4 人，3 隊一大隊，會覆蓋現有編組）")) return;
+    setIsSyncing(true);
+    try {
+      const res = await autoAssignSquadsForTesting();
+      if (res.success) {
+        setModalMessage({ text: `分配完成！共 ${res.totalPlayers} 位玩家，${res.squadCount} 支小隊，${res.battalionCount} 個大隊。`, type: 'success' });
+      } else {
+        setModalMessage({ text: '分配失敗：' + res.error, type: 'error' });
       }
     } catch (e: any) {
       setModalMessage({ text: '系統異常：' + e.message, type: 'error' });
@@ -322,6 +351,7 @@ export default function App() {
       if (error) throw error;
       const newQuest: TemporaryQuest = { id, title, sub, desc, reward, limit: 1, active: true };
       setTemporaryQuests(prev => [newQuest, ...prev]);
+      await logAdminAction('temp_quest_add', 'admin', id, title, { reward });
     } catch (err) {
       console.error(err);
       setModalMessage({ text: "新增臨時任務失敗。", type: 'error' });
@@ -336,6 +366,7 @@ export default function App() {
       const { error } = await supabase.from('temporaryquests').update({ active }).eq('id', id);
       if (error) throw error;
       setTemporaryQuests(prev => prev.map(q => q.id === id ? { ...q, active } : q));
+      await logAdminAction('temp_quest_toggle', 'admin', id, undefined, { active });
     } catch (err) {
       setModalMessage({ text: "更新臨時任務狀態失敗。", type: 'error' });
     } finally {
@@ -350,10 +381,50 @@ export default function App() {
       const { error } = await supabase.from('temporaryquests').delete().eq('id', id);
       if (error) throw error;
       setTemporaryQuests(prev => prev.filter(q => q.id !== id));
+      await logAdminAction('temp_quest_delete', 'admin', id);
     } catch (err) {
       setModalMessage({ text: "刪除臨時任務失敗。", type: 'error' });
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handleSubmitW4 = async (data: { interviewTarget: string; interviewDate: string; description: string }) => {
+    if (!userData) return;
+    const res = await submitW4Application(
+      userData.UserID, userData.Name,
+      userData.TeamName || null, userData.SquadName || null,
+      data.interviewTarget, data.interviewDate, data.description
+    );
+    if (res.success && res.application) {
+      setW4Applications(prev => [res.application as W4Application, ...prev]);
+      setModalMessage({ text: '傳愛申請已提交，待小隊長審核。', type: 'success' });
+    } else {
+      setModalMessage({ text: res.error || '提交失敗', type: 'error' });
+    }
+  };
+
+  const handleReviewW4BySquad = async (appId: string, approve: boolean, notes: string) => {
+    if (!userData) return;
+    const res = await reviewW4BySquadLeader(appId, userData.UserID, approve, notes);
+    if (res.success) {
+      setPendingW4Apps(prev => prev.filter(a => a.id !== appId));
+      setModalMessage({ text: approve ? '初審通過！' : '已駁回申請。', type: approve ? 'success' : 'info' });
+    } else {
+      setModalMessage({ text: res.error || '審核失敗', type: 'error' });
+    }
+  };
+
+  const handleFinalReviewW4 = async (appId: string, approve: boolean, notes: string) => {
+    const res = await reviewW4ByAdmin(appId, approve ? 'approve' : 'reject', notes);
+    if (res.success) {
+      setSquadApprovedW4Apps(prev => prev.filter(a => a.id !== appId));
+      setModalMessage({ text: approve ? '已核准入帳！修為已發放。' : '已駁回申請。', type: approve ? 'success' : 'info' });
+      // Refresh admin logs
+      const logsRes = await getAdminActivityLog(30);
+      if (logsRes.success) setAdminLogs(logsRes.logs as AdminLog[]);
+    } else {
+      setModalMessage({ text: (res as any).error || '審核失敗', type: 'error' });
     }
   };
 
@@ -513,15 +584,34 @@ export default function App() {
       }
       await supabase.from('DailyLogs').delete().eq('id', targetLogs[0].id);
 
+      const actualReward: number = targetLogs[0].RewardPoints ?? quest.reward;
+      const newExp = Math.max(0, userData.Exp - actualReward);
+      const newLevel = calculateLevelFromExp(newExp);
       const roleInfo = ROLE_CURE_MAP[userData.Role];
+
       const update: Partial<CharacterStats> = {
-        Exp: Math.max(0, userData.Exp - quest.reward),
-        EnergyDice: Math.max(0, userData.EnergyDice - (quest.dice || 0))
+        Exp: newExp,
+        Level: newLevel,
+        EnergyDice: Math.max(0, userData.EnergyDice - (quest.dice || 0)),
+        Coins: Math.max(0, userData.Coins - Math.floor(actualReward * 0.1)),
       };
 
+      // Reverse level-up stat bonuses if level dropped
+      if (newLevel < userData.Level) {
+        const growthRates = ROLE_GROWTH_RATES[userData.Role] || {};
+        const levelsLost = userData.Level - newLevel;
+        for (const [stat, rate] of Object.entries(growthRates)) {
+          const key = stat as keyof CharacterStats;
+          const current = (userData[key] as number) ?? 0;
+          (update as any)[key] = Math.max(0, current - (rate as number) * levelsLost);
+        }
+      }
+
+      // Reverse cure bonus if applicable
       if (roleInfo?.cureTaskId === quest.id) {
         const statKey = roleInfo.bonusStat;
-        (update as any)[statKey] = Math.max(10, (userData[statKey] as number) - 2);
+        const current = (update as any)[statKey] ?? (userData[statKey] as number);
+        (update as any)[statKey] = Math.max(10, current - 2);
       }
 
       await supabase.from('CharacterStats').update(update).eq('UserID', userData.UserID);
@@ -738,13 +828,42 @@ export default function App() {
             const { count } = await supabase.from('CharacterStats').select('*', { count: 'exact', head: true }).eq('TeamName', stats.TeamName);
             setTeamMemberCount(count || 1);
             await fetchTeammates(stats.TeamName, stats.UserID);
+
+            // Auto-draw fallback: if it's Monday after noon (Taiwan UTC+8) and team hasn't drawn yet
+            const nowTaiwan = new Date(Date.now() + 8 * 3600 * 1000);
+            const isMondayAfterNoon = nowTaiwan.getUTCDay() === 1 && nowTaiwan.getUTCHours() >= 12;
+            const weekMondayStr = (() => {
+              const d = new Date(nowTaiwan);
+              d.setUTCDate(d.getUTCDate() - (d.getUTCDay() - 1));
+              return d.toISOString().slice(0, 10);
+            })();
+            const teamAlreadyDrew = tSettings?.mandatory_quest_week === weekMondayStr;
+            if (isMondayAfterNoon && !teamAlreadyDrew) {
+              const drawRes = await autoDrawAllSquads();
+              if (drawRes.success && (drawRes.drawnCount ?? 0) > 0) {
+                // Refresh teamSettings so UI reflects the newly drawn quest
+                const { data: freshTS } = await supabase.from('TeamSettings').select('*').eq('team_name', stats.TeamName).single();
+                if (freshTS) setTeamSettings(freshTS);
+              }
+            }
           }
 
           setUserData(stats as CharacterStats);
           setLogs(logsArray);
+
+          // Fetch w4 applications for this user
+          const w4Res = await getW4Applications({ userId: stats.UserID });
+          if (w4Res.success) setW4Applications(w4Res.applications);
+
+          // If squad leader, fetch pending apps for review
+          if (stats.IsCaptain && stats.TeamName) {
+            const pendingRes = await getW4Applications({ squadName: stats.TeamName, status: 'pending' });
+            if (pendingRes.success) setPendingW4Apps(pendingRes.applications);
+          }
+
           setView('app');
-        } else { setView('login'); }
-      } else if (!savedUid) { setView('login'); }
+        } else { setView(v => v === 'loading' ? 'login' : v); }
+      } else if (!savedUid) { setView(v => v === 'loading' ? 'login' : v); }
     };
     init();
   }, [userData]);
@@ -792,8 +911,10 @@ export default function App() {
             isTopicDone={isTopicDone}
             temporaryQuests={temporaryQuests.filter(t => t.active)}
             userInventory={typeof userData?.Inventory === 'string' ? JSON.parse(userData.Inventory) : (userData?.Inventory || [])}
+            w4Applications={w4Applications}
             onCheckIn={handleCheckInAction}
             onUndo={setUndoTarget}
+            onSubmitW4={handleSubmitW4}
           />
         )}
         {activeTab === 'rank' && <RankTab leaderboard={leaderboard} currentUserId={userData?.UserID} />}
@@ -811,7 +932,9 @@ export default function App() {
           <CaptainTab
             teamName={userData.TeamName || '未編組'}
             teamSettings={teamSettings}
+            pendingW4Apps={pendingW4Apps}
             onDrawWeeklyQuest={handleDrawWeeklyQuest}
+            onReviewW4={handleReviewW4BySquad}
           />
         )}
       </main>
@@ -889,13 +1012,17 @@ export default function App() {
           leaderboard={leaderboard}
           topicHistory={topicHistory}
           temporaryQuests={temporaryQuests}
+          squadApprovedW4Apps={squadApprovedW4Apps}
+          adminLogs={adminLogs}
           onAddTempQuest={handleAddTempQuest}
           onToggleTempQuest={handleToggleTempQuest}
           onDeleteTempQuest={handleDeleteTempQuest}
           onTriggerSnapshot={handleTriggerSnapshot}
           onCheckW3Compliance={handleCheckW3Compliance}
           onAutoDrawAllSquads={handleAutoDrawAllSquads}
+          onAutoAssignSquads={handleAutoAssignSquads}
           onImportRoster={handleImportRoster}
+          onFinalReviewW4={handleFinalReviewW4}
           onClose={() => setView('login')}
         />
       )}

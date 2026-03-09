@@ -1,34 +1,57 @@
 import React from 'react';
 import { Settings, X, BarChart3, Save, Users, Lock } from 'lucide-react';
-import { SystemSettings, CharacterStats, TopicHistory, TemporaryQuest } from '@/types';
+import { SystemSettings, CharacterStats, TopicHistory, TemporaryQuest, W4Application, AdminLog } from '@/types';
+
+const ACTION_LABELS: Record<string, string> = {
+    temp_quest_add: '新增臨時任務',
+    temp_quest_toggle: '切換臨時任務狀態',
+    temp_quest_delete: '刪除臨時任務',
+    roster_import: '匯入名冊',
+    auto_assign_squads: '自動分配大小隊',
+    auto_draw_quests: '全服自動抽籤',
+    weekly_snapshot: '每週業力結算',
+    w3_compliance: 'w3 週罰款結算',
+    w4_final_approve: 'w4 終審核准',
+    w4_final_reject: 'w4 終審駁回',
+    topic_title_update: '更新主題名稱',
+};
 
 interface AdminDashboardProps {
     adminAuth: boolean;
-    onAuth: (e: React.FormEvent<HTMLFormElement>) => void;
+    onAuth: (e: { preventDefault: () => void; currentTarget: HTMLFormElement }) => void;
     systemSettings: SystemSettings;
     updateGlobalSetting: (key: string, value: string) => void;
     leaderboard: CharacterStats[];
     topicHistory: TopicHistory[];
     temporaryQuests: TemporaryQuest[];
+    squadApprovedW4Apps: W4Application[];
+    adminLogs: AdminLog[];
     onAddTempQuest: (title: string, sub: string, desc: string, reward: number) => void;
     onToggleTempQuest: (id: string, active: boolean) => void;
     onDeleteTempQuest: (id: string) => void;
     onTriggerSnapshot: () => void;
     onCheckW3Compliance: () => void;
     onAutoDrawAllSquads: () => void;
+    onAutoAssignSquads: () => void;
     onImportRoster: (csvData: string) => Promise<void>;
+    onFinalReviewW4: (appId: string, approve: boolean, notes: string) => Promise<void>;
     onClose: () => void;
 }
 
 export function AdminDashboard({
     adminAuth, onAuth, systemSettings, updateGlobalSetting,
     leaderboard, topicHistory, temporaryQuests,
-    onAddTempQuest, onToggleTempQuest, onDeleteTempQuest, onTriggerSnapshot, onCheckW3Compliance, onAutoDrawAllSquads, onImportRoster, onClose
+    squadApprovedW4Apps, adminLogs,
+    onAddTempQuest, onToggleTempQuest, onDeleteTempQuest,
+    onTriggerSnapshot, onCheckW3Compliance, onAutoDrawAllSquads, onAutoAssignSquads,
+    onImportRoster, onFinalReviewW4, onClose
 }: AdminDashboardProps) {
     const [csvInput, setCsvInput] = React.useState("");
     const [isImporting, setIsImporting] = React.useState(false);
+    const [w4Notes, setW4Notes] = React.useState<Record<string, string>>({});
+    const [reviewingW4Id, setReviewingW4Id] = React.useState<string | null>(null);
 
-    const handleImportSubmit = async (e: React.FormEvent) => {
+    const handleImportSubmit = async (e: { preventDefault: () => void }) => {
         e.preventDefault();
         if (!csvInput.trim()) return;
         setIsImporting(true);
@@ -36,6 +59,14 @@ export function AdminDashboard({
         setIsImporting(false);
         setCsvInput("");
     };
+
+    const handleW4Review = async (appId: string, approve: boolean) => {
+        setReviewingW4Id(appId);
+        await onFinalReviewW4(appId, approve, w4Notes[appId] || '');
+        setReviewingW4Id(null);
+        setW4Notes(prev => { const n = { ...prev }; delete n[appId]; return n; });
+    };
+
     if (!adminAuth) {
         return (
             <div className="min-h-screen bg-slate-950 text-slate-200 p-8 flex flex-col justify-center items-center animate-in fade-in">
@@ -115,6 +146,10 @@ export function AdminDashboard({
                     <section className="space-y-6">
                         <div className="flex items-center gap-2 text-orange-500 font-black text-sm uppercase tracking-widest"><Users size={16} /> 戰隊名冊管理</div>
                         <div className="bg-slate-900 border-2 border-slate-800 p-8 rounded-4xl space-y-6 shadow-xl">
+                            <button onClick={onAutoAssignSquads} className="w-full bg-violet-700 p-4 rounded-2xl text-white font-black shadow-lg hover:bg-violet-600 transition-colors">
+                                🎲 測試用：自動隨機分配大隊 / 小隊
+                            </button>
+                            <div className="border-t border-white/5 pt-4" />
                             <form onSubmit={handleImportSubmit} className="space-y-4 text-center">
                                 <p className="text-xs text-slate-400 text-left">請貼上 CSV 格式資料<br />(email,大隊名稱,小隊名稱,是否隊長(true/false))</p>
                                 <textarea
@@ -188,6 +223,53 @@ export function AdminDashboard({
                     </section>
                 </div>
 
+                {/* ❤️ w4 傳愛分數終審 */}
+                <section className="space-y-6">
+                    <div className="flex items-center gap-2 text-pink-500 font-black text-sm uppercase tracking-widest">❤️ 傳愛分數終審（管理員）</div>
+                    <div className="bg-slate-900 border-2 border-pink-500/20 p-8 rounded-4xl shadow-xl space-y-4">
+                        {squadApprovedW4Apps.length === 0 ? (
+                            <p className="text-sm text-slate-500 text-center py-4">目前無待終審申請</p>
+                        ) : (
+                            squadApprovedW4Apps.map(app => (
+                                <div key={app.id} className="bg-slate-800 rounded-2xl p-5 space-y-3">
+                                    <div className="flex justify-between items-start flex-wrap gap-2">
+                                        <div>
+                                            <p className="font-black text-white">{app.user_name}</p>
+                                            <p className="text-xs text-slate-400">{app.squad_name} · 訪談：{app.interview_target} · {app.interview_date}</p>
+                                            {app.squad_review_notes && <p className="text-xs text-indigo-400 mt-1">小隊長備註：{app.squad_review_notes}</p>}
+                                        </div>
+                                        <span className="text-[10px] font-black text-blue-400 bg-blue-400/10 px-2 py-1 rounded-lg">待終審</span>
+                                    </div>
+                                    {app.description && <p className="text-xs text-slate-400 italic">{app.description}</p>}
+                                    <textarea
+                                        placeholder="終審備註（選填）"
+                                        value={w4Notes[app.id] || ''}
+                                        onChange={e => setW4Notes(prev => ({ ...prev, [app.id]: e.target.value }))}
+                                        rows={2}
+                                        className="w-full bg-slate-700 border border-slate-600 rounded-xl p-3 text-white text-xs outline-none focus:border-pink-500 resize-none"
+                                    />
+                                    <div className="flex gap-3">
+                                        <button
+                                            disabled={reviewingW4Id === app.id}
+                                            onClick={() => handleW4Review(app.id, false)}
+                                            className="flex-1 py-2 bg-red-600/20 text-red-400 font-black rounded-xl text-sm border border-red-600/30 active:scale-95 transition-all disabled:opacity-50"
+                                        >
+                                            ❌ 駁回
+                                        </button>
+                                        <button
+                                            disabled={reviewingW4Id === app.id}
+                                            onClick={() => handleW4Review(app.id, true)}
+                                            className="flex-2 py-2 bg-emerald-600 text-white font-black rounded-xl text-sm shadow-lg active:scale-95 transition-all disabled:opacity-50"
+                                        >
+                                            ✅ 核准入帳
+                                        </button>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </section>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <section className="space-y-6">
                         <div className="flex items-center gap-2 text-orange-500 font-black text-sm uppercase tracking-widest"><Users size={16} /> 修行者修為榜預覽</div>
@@ -202,6 +284,38 @@ export function AdminDashboard({
                                     <div className="text-right">
                                         <p className="text-xs font-black text-orange-500">{p.Exp} 修為</p>
                                         <p className="text-[10px] text-red-500">罰金 NT${p.TotalFines}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </section>
+
+                    {/* 操作日誌 */}
+                    <section className="space-y-6">
+                        <div className="flex items-center gap-2 text-orange-500 font-black text-sm uppercase tracking-widest"><BarChart3 size={16} /> 管理操作日誌</div>
+                        <div className="bg-slate-900 border-2 border-slate-800 rounded-4xl overflow-hidden shadow-xl max-h-[400px] overflow-y-auto divide-y divide-slate-800">
+                            {adminLogs.length === 0 ? (
+                                <p className="text-sm text-slate-500 text-center py-8">尚無操作記錄</p>
+                            ) : adminLogs.map(log => (
+                                <div key={log.id} className={`p-4 hover:bg-white/5 transition-colors ${log.result === 'error' ? 'bg-red-950/20' : ''}`}>
+                                    <div className="flex justify-between items-start gap-2">
+                                        <div className="flex-1 min-w-0">
+                                            <p className={`text-xs font-black ${log.result === 'error' ? 'text-red-400' : 'text-slate-200'}`}>
+                                                {ACTION_LABELS[log.action] || log.action}
+                                            </p>
+                                            {log.target_name && <p className="text-[10px] text-slate-500 truncate">對象：{log.target_name}</p>}
+                                            {log.details && (
+                                                <p className="text-[10px] text-slate-600 truncate">
+                                                    {Object.entries(log.details).map(([k, v]) => `${k}: ${v}`).join(' · ')}
+                                                </p>
+                                            )}
+                                        </div>
+                                        <div className="text-right shrink-0">
+                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${log.result === 'error' ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/10 text-emerald-500'}`}>
+                                                {log.result === 'error' ? '失敗' : '成功'}
+                                            </span>
+                                            <p className="text-[10px] text-slate-600 mt-1">{new Date(log.created_at).toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</p>
+                                        </div>
                                     </div>
                                 </div>
                             ))}

@@ -1,6 +1,27 @@
 'use server';
 
 import { getPool } from '@/lib/db';
+import { createClient } from '@supabase/supabase-js';
+
+const _supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const _supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+
+// ── 通用管理操作 Log ──────────────────────────────────────
+export async function logAdminAction(
+    action: string,
+    actor: string,
+    targetId?: string,
+    targetName?: string,
+    details?: Record<string, any>,
+    result: 'success' | 'error' = 'success'
+) {
+    try {
+        const supabase = createClient(_supabaseUrl, _supabaseKey);
+        await supabase.from('AdminActivityLog').insert({
+            action, actor, target_id: targetId, target_name: targetName, details, result,
+        });
+    } catch (_) { /* log failure should never break the main flow */ }
+}
 
 export async function triggerWeeklySnapshot() {
     const pool = getPool();
@@ -92,10 +113,12 @@ export async function triggerWeeklySnapshot() {
         }
 
         await client.query('COMMIT');
+        await logAdminAction('weekly_snapshot', 'admin', undefined, undefined, { worldState, rate: Math.round(rate * 100) + '%' });
         return { success: true, worldState, rate, message: stateMsg };
 
     } catch (error: any) {
         await client.query('ROLLBACK');
+        await logAdminAction('weekly_snapshot', 'admin', undefined, undefined, { error: error.message }, 'error');
         return { success: false, error: error.message };
     } finally {
         client.release();
@@ -150,6 +173,11 @@ export async function checkWeeklyW3Compliance(weekMondayISO?: string) {
         }
         await client.query('COMMIT');
 
+        await logAdminAction('w3_compliance', 'admin', undefined, weekLabel, {
+            totalUsers: usersRes.rowCount || 0,
+            violatorCount: violators.length,
+            violators: violators.map(v => v.name),
+        });
         return {
             success: true,
             weekLabel,
@@ -159,6 +187,96 @@ export async function checkWeeklyW3Compliance(weekMondayISO?: string) {
         };
     } catch (error: any) {
         await client.query('ROLLBACK');
+        await logAdminAction('w3_compliance', 'admin', undefined, undefined, { error: error.message }, 'error');
+        return { success: false, error: error.message };
+    } finally {
+        client.release();
+    }
+}
+
+const ZH_NUMS = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十',
+    '十一', '十二', '十三', '十四', '十五', '十六', '十七', '十八', '十九', '二十'];
+
+/**
+ * 測試用：將現有玩家隨機分配到大隊 / 小隊，並自動設定隊長與 TeamSettings。
+ * 每支小隊 SQUAD_SIZE 人，每個大隊 SQUADS_PER_BATTALION 支小隊。
+ * 可重複執行（覆蓋舊值）。
+ */
+export async function autoAssignSquadsForTesting(
+    squadSize = 4,
+    squadsPerBattalion = 3
+) {
+    const pool = getPool();
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // 1. 取得所有玩家並隨機排列
+        const { rows: allUsers } = await client.query<{ UserID: string; Name: string }>(
+            `SELECT "UserID", "Name" FROM "CharacterStats" ORDER BY "UserID"`
+        );
+        if (allUsers.length === 0) {
+            await client.query('ROLLBACK');
+            return { success: false, error: '資料庫中尚無玩家' };
+        }
+
+        // Fisher-Yates shuffle
+        for (let i = allUsers.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [allUsers[i], allUsers[j]] = [allUsers[j], allUsers[i]];
+        }
+
+        // 2. 分組
+        const squads: { battalionName: string; squadName: string; members: typeof allUsers }[] = [];
+        for (let i = 0; i < allUsers.length; i += squadSize) {
+            const squadIdx = squads.length;
+            const battalionIdx = Math.floor(squadIdx / squadsPerBattalion);
+            const squadInBattalion = (squadIdx % squadsPerBattalion) + 1;
+            const battalionName = `第${ZH_NUMS[battalionIdx] ?? battalionIdx + 1}大隊`;
+            const squadName = `${battalionName}-小隊${ZH_NUMS[squadInBattalion - 1] ?? squadInBattalion}`;
+            squads.push({ battalionName, squadName, members: allUsers.slice(i, i + squadSize) });
+        }
+
+        // 3. 更新 CharacterStats + upsert TeamSettings
+        for (const squad of squads) {
+            for (let mi = 0; mi < squad.members.length; mi++) {
+                const user = squad.members[mi];
+                const isCaptain = mi === 0;
+                await client.query(
+                    `UPDATE "CharacterStats"
+                     SET "SquadName" = $1, "TeamName" = $2, "IsCaptain" = $3
+                     WHERE "UserID" = $4`,
+                    [squad.battalionName, squad.squadName, isCaptain, user.UserID]
+                );
+            }
+            await client.query(
+                `INSERT INTO "TeamSettings" (team_name, team_coins)
+                 VALUES ($1, 0)
+                 ON CONFLICT (team_name) DO NOTHING`,
+                [squad.squadName]
+            );
+        }
+
+        await client.query('COMMIT');
+
+        await logAdminAction('auto_assign_squads', 'admin', undefined, undefined, {
+            totalPlayers: allUsers.length,
+            squadCount: squads.length,
+            battalionCount: Math.ceil(squads.length / squadsPerBattalion),
+        });
+        return {
+            success: true,
+            totalPlayers: allUsers.length,
+            squadCount: squads.length,
+            battalionCount: Math.ceil(squads.length / squadsPerBattalion),
+            summary: squads.map(s => ({
+                squad: s.squadName,
+                members: s.members.map((m, i) => `${m.Name}${i === 0 ? '（隊長）' : ''}`)
+            })),
+        };
+    } catch (error: any) {
+        await client.query('ROLLBACK');
+        await logAdminAction('auto_assign_squads', 'admin', undefined, undefined, { error: error.message }, 'error');
         return { success: false, error: error.message };
     } finally {
         client.release();
@@ -206,9 +324,11 @@ export async function importRostersData(csvContent: string) {
         }
 
         await client.query('COMMIT');
+        await logAdminAction('roster_import', 'admin', undefined, undefined, { count });
         return { success: true, count };
     } catch (error: any) {
         await client.query('ROLLBACK');
+        await logAdminAction('roster_import', 'admin', undefined, undefined, { error: error.message }, 'error');
         return { success: false, error: error.message };
     } finally {
         client.release();

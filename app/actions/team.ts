@@ -2,6 +2,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { DAILY_QUEST_CONFIG } from "@/lib/constants";
+import { logAdminAction } from "@/app/actions/admin";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseActionKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -26,13 +27,24 @@ export async function drawWeeklyQuestForSquad(squadName: string, captainUserId: 
     const supabase = createClient(supabaseUrl, supabaseActionKey);
     const weekMondayStr = getCurrentWeekMondayStr();
 
-    const { data: ts, error: tsErr } = await supabase
+    // Get or create TeamSettings row (may be missing if squad was set up via roster import)
+    let { data: ts } = await supabase
         .from('TeamSettings')
         .select('mandatory_quest_id, mandatory_quest_week, quest_draw_history')
         .eq('team_name', squadName)
-        .single();
+        .maybeSingle();
 
-    if (tsErr || !ts) return { success: false, error: '找不到小隊設定' };
+    if (!ts) {
+        const { data: inserted, error: insertErr } = await supabase
+            .from('TeamSettings')
+            .insert({ team_name: squadName, team_coins: 0 })
+            .select('mandatory_quest_id, mandatory_quest_week, quest_draw_history')
+            .single();
+        if (insertErr) return { success: false, error: '小隊設定建立失敗：' + insertErr.message };
+        ts = inserted;
+    }
+
+    if (!ts) return { success: false, error: '無法取得小隊設定' };
     if (ts.mandatory_quest_week === weekMondayStr) {
         return { success: false, error: `本週已抽選：${ts.mandatory_quest_id}` };
     }
@@ -65,6 +77,22 @@ export async function autoDrawAllSquads() {
     const supabase = createClient(supabaseUrl, supabaseActionKey);
     const weekMondayStr = getCurrentWeekMondayStr();
 
+    // Collect all distinct squad names from CharacterStats and ensure TeamSettings rows exist
+    const { data: squadsInStats } = await supabase
+        .from('CharacterStats')
+        .select('TeamName')
+        .not('TeamName', 'is', null);
+    if (squadsInStats) {
+        const distinctNames = [...new Set(squadsInStats.map((r: any) => r.TeamName).filter(Boolean))];
+        for (const name of distinctNames) {
+            const { data: exists } = await supabase
+                .from('TeamSettings').select('team_name').eq('team_name', name).maybeSingle();
+            if (!exists) {
+                await supabase.from('TeamSettings').insert({ team_name: name, team_coins: 0 });
+            }
+        }
+    }
+
     const { data: allTeams, error } = await supabase.from('TeamSettings').select('*');
     if (error || !allTeams) return { success: false, error: error?.message || '無法讀取小隊列表' };
 
@@ -87,6 +115,14 @@ export async function autoDrawAllSquads() {
 
         const questName = DAILY_QUEST_CONFIG.find(q => q.id === questId)?.title || questId;
         drawn.push({ squadName: ts.team_name, questId, questName });
+    }
+
+    if (drawn.length > 0) {
+        await logAdminAction('auto_draw_quests', 'admin', undefined, undefined, {
+            drawnCount: drawn.length,
+            skippedCount: allTeams.length - drawn.length,
+            weekLabel: weekMondayStr,
+        });
     }
 
     return {

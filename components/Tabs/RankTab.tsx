@@ -36,11 +36,11 @@ export function RankTab({ leaderboard, currentUserId }: RankTabProps) {
     const squadRank = useMemo<SquadRankEntry[]>(() => {
         const map = new Map<string, SquadRankEntry>();
         for (const p of leaderboard) {
-            const key = p.SquadName || `__solo_${p.UserID}`;
+            const key = p.TeamName || `__solo_${p.UserID}`;
             if (!map.has(key)) {
                 map.set(key, {
-                    squadName: p.SquadName || p.Name,
-                    teamName: p.TeamName,
+                    squadName: p.TeamName || p.Name,
+                    teamName: p.SquadName,
                     totalExp: 0,
                     memberCount: 0,
                     members: [],
@@ -115,7 +115,7 @@ export function RankTab({ leaderboard, currentUserId }: RankTabProps) {
                                             {p.Name}{isSelf && ' 🔥'}
                                         </p>
                                         <p className="text-[10px] text-slate-500 italic uppercase tracking-widest">
-                                            {p.Role}{p.SquadName ? ` · ${p.SquadName}` : ''}
+                                            {p.Role}{p.TeamName ? ` · ${p.TeamName}` : (p.SquadName ? ` · ${p.SquadName}` : '')}
                                         </p>
                                     </div>
                                     {/* 修為 */}

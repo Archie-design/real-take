@@ -1,5 +1,5 @@
-import React from 'react';
-import { Quest, DailyLog, SystemSettings, TemporaryQuest } from '@/types';
+import { useState } from 'react';
+import { Quest, DailyLog, SystemSettings, TemporaryQuest, W4Application } from '@/types';
 import { WEEKLY_QUEST_CONFIG } from '@/lib/constants';
 import { getLogicalDateStr } from '@/lib/utils/time';
 
@@ -10,11 +10,37 @@ interface WeeklyTopicTabProps {
     isTopicDone: boolean;
     temporaryQuests: TemporaryQuest[];
     userInventory: string[];
+    w4Applications: W4Application[];
     onCheckIn: (q: Quest) => void;
     onUndo: (q: Quest) => void;
+    onSubmitW4: (data: { interviewTarget: string; interviewDate: string; description: string }) => Promise<void>;
 }
 
-export function WeeklyTopicTab({ systemSettings, logs, currentWeeklyMonday, isTopicDone, temporaryQuests, userInventory, onCheckIn, onUndo }: WeeklyTopicTabProps) {
+const W4_STATUS_LABELS: Record<string, { label: string; color: string }> = {
+    pending: { label: '🟡 待小隊長審核', color: 'text-yellow-400' },
+    squad_approved: { label: '🔵 待管理員核實', color: 'text-blue-400' },
+    approved: { label: '🟢 已核准（已入帳）', color: 'text-emerald-400' },
+    rejected: { label: '🔴 已駁回', color: 'text-red-400' },
+};
+
+export function WeeklyTopicTab({ systemSettings, logs, currentWeeklyMonday, isTopicDone, temporaryQuests, userInventory, w4Applications, onCheckIn, onUndo, onSubmitW4 }: WeeklyTopicTabProps) {
+    const [showW4Form, setShowW4Form] = useState(false);
+    const [w4Target, setW4Target] = useState('');
+    const [w4Date, setW4Date] = useState(getLogicalDateStr(new Date()));
+    const [w4Desc, setW4Desc] = useState('');
+    const [isSubmittingW4, setIsSubmittingW4] = useState(false);
+
+    const handleW4Submit = async (e: { preventDefault: () => void }) => {
+        e.preventDefault();
+        if (!w4Target.trim()) return;
+        setIsSubmittingW4(true);
+        await onSubmitW4({ interviewTarget: w4Target, interviewDate: w4Date, description: w4Desc });
+        setIsSubmittingW4(false);
+        setShowW4Form(false);
+        setW4Target('');
+        setW4Desc('');
+    };
+
     return (
         <div className="space-y-8 animate-in slide-in-from-right-8 duration-500 text-center mx-auto text-center">
             <div className="p-8 rounded-4xl border-2 border-yellow-500/50 bg-yellow-500/5 shadow-2xl relative overflow-hidden text-center mx-auto">
@@ -25,7 +51,10 @@ export function WeeklyTopicTab({ systemSettings, logs, currentWeeklyMonday, isTo
                         <h3 className="text-2xl font-black text-white italic uppercase">主題親證</h3>
                         <p className="text-sm text-yellow-400 font-bold mt-1 italic">「{systemSettings.TopicQuestTitle}」</p>
                     </div>
-                    <div className="text-sm font-black text-yellow-500 bg-yellow-500/10 px-3 py-1 rounded-xl">+1000</div>
+                    <div className="text-right bg-yellow-500/10 px-3 py-2 rounded-xl">
+                        <div className="text-sm font-black text-yellow-500">+1000 修為</div>
+                        <div className="text-xs font-bold text-yellow-400">+100 🪙</div>
+                    </div>
                 </div>
                 <button
                     onClick={() => !isTopicDone ? onCheckIn({ id: 't1', title: '主題親證', reward: 1000 }) : onUndo({ id: 't1', title: '主題親證', reward: 1000 })}
@@ -34,7 +63,7 @@ export function WeeklyTopicTab({ systemSettings, logs, currentWeeklyMonday, isTo
                 </button>
             </div>
 
-            {WEEKLY_QUEST_CONFIG.map(q => {
+            {WEEKLY_QUEST_CONFIG.filter(q => q.id !== 'w4').map(q => {
                 const comps = logs.filter(l => l.QuestID.startsWith(q.id) && new Date(l.Timestamp) >= currentWeeklyMonday).length;
                 const isMax = q.limit !== 99 && comps >= (q.limit || 0);
                 return (
@@ -45,7 +74,10 @@ export function WeeklyTopicTab({ systemSettings, logs, currentWeeklyMonday, isTo
                                 <h3 className="text-2xl font-black text-white">{q.title}</h3>
                                 <p className="text-sm text-slate-400 font-bold italic">{q.sub}</p>
                             </div>
-                            <div className="text-sm font-black text-blue-400 bg-blue-400/10 px-3 py-1 rounded-xl">+ {q.reward}</div>
+                            <div className="text-right bg-blue-400/10 px-3 py-2 rounded-xl">
+                                <div className="text-sm font-black text-blue-400">+{q.reward} 修為</div>
+                                <div className="text-xs font-bold text-yellow-400">+{Math.floor(q.reward * 0.1)} 🪙</div>
+                            </div>
                         </div>
                         <div className="flex justify-between items-center px-2 mx-auto">
                             {['一', '二', '三', '四', '五', '六', '日'].map((day, idx) => {
@@ -66,6 +98,94 @@ export function WeeklyTopicTab({ systemSettings, logs, currentWeeklyMonday, isTo
                     </div>
                 );
             })}
+
+            {/* w4 傳愛分數 — 申請制 */}
+            <div className="p-8 rounded-4xl bg-slate-900 border border-pink-500/20 shadow-2xl">
+                <div className="flex items-center gap-6 mb-6 text-left justify-center mx-auto">
+                    <div className="text-6xl mx-auto">❤️</div>
+                    <div className="flex-1 text-left">
+                        <h3 className="text-2xl font-black text-white">傳愛分數</h3>
+                        <p className="text-sm text-slate-400 font-bold italic">訪談成功加分 · 三級審核制</p>
+                    </div>
+                    <div className="text-right bg-pink-500/10 px-3 py-2 rounded-xl">
+                        <div className="text-sm font-black text-pink-400">+1000 修為</div>
+                        <div className="text-xs font-bold text-yellow-400">+100 🪙</div>
+                    </div>
+                </div>
+
+                {!showW4Form ? (
+                    <button
+                        onClick={() => setShowW4Form(true)}
+                        className="w-full py-4 rounded-2xl font-black text-lg bg-pink-600 text-white shadow-lg active:scale-95 transition-all"
+                    >
+                        ❤️ 提交傳愛申請
+                    </button>
+                ) : (
+                    <form onSubmit={handleW4Submit} className="space-y-4 text-left">
+                        <div className="space-y-2">
+                            <label className="text-xs font-black text-slate-400 uppercase tracking-widest">傳愛對象 *</label>
+                            <input
+                                required
+                                value={w4Target}
+                                onChange={e => setW4Target(e.target.value)}
+                                placeholder="例：王小明"
+                                className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 text-white font-bold outline-none focus:border-pink-500"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-black text-slate-400 uppercase tracking-widest">訪談日期 *</label>
+                            <input
+                                required
+                                type="date"
+                                value={w4Date}
+                                onChange={e => setW4Date(e.target.value)}
+                                className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 text-white font-bold outline-none focus:border-pink-500"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-black text-slate-400 uppercase tracking-widest">簡述（選填）</label>
+                            <textarea
+                                value={w4Desc}
+                                onChange={e => setW4Desc(e.target.value)}
+                                placeholder="簡述訪談過程或成果..."
+                                rows={3}
+                                className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 text-white font-bold outline-none focus:border-pink-500 resize-none"
+                            />
+                        </div>
+                        <div className="flex gap-3">
+                            <button type="button" onClick={() => setShowW4Form(false)} className="flex-1 py-3 bg-slate-800 text-slate-400 font-bold rounded-2xl">取消</button>
+                            <button type="submit" disabled={isSubmittingW4} className="flex-2 py-3 bg-pink-600 text-white font-black rounded-2xl shadow-lg active:scale-95 transition-all disabled:opacity-50">
+                                {isSubmittingW4 ? '提交中...' : '確認送出'}
+                            </button>
+                        </div>
+                    </form>
+                )}
+
+                {w4Applications.length > 0 && (
+                    <div className="mt-6 space-y-3">
+                        <p className="text-xs font-black text-slate-500 uppercase tracking-widest text-left">申請記錄</p>
+                        {w4Applications.map(app => {
+                            const statusInfo = W4_STATUS_LABELS[app.status] || { label: app.status, color: 'text-slate-400' };
+                            return (
+                                <div key={app.id} className="bg-slate-800 rounded-2xl p-4 text-left space-y-1">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <p className="font-bold text-white text-sm">傳愛對象：{app.interview_target}</p>
+                                            <p className="text-xs text-slate-500">{app.interview_date}</p>
+                                        </div>
+                                        <span className={`text-xs font-black ${statusInfo.color}`}>{statusInfo.label}</span>
+                                    </div>
+                                    {app.description && <p className="text-xs text-slate-400 italic">{app.description}</p>}
+                                    {app.status === 'rejected' && (app.squad_review_notes || app.final_review_notes) && (
+                                        <p className="text-xs text-red-400 font-bold">駁回原因：{app.final_review_notes || app.squad_review_notes}</p>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+
             {userInventory.includes('a6') && (() => {
                 const PREFIX = 'bd_yuanmeng';
                 const weekComps = logs.filter(l => l.QuestID.startsWith(PREFIX) && new Date(l.Timestamp) >= currentWeeklyMonday).length;
@@ -81,7 +201,7 @@ export function WeeklyTopicTab({ systemSettings, logs, currentWeeklyMonday, isTo
                                 <div className="text-5xl">🪬</div>
                                 <div className="text-left">
                                     <h4 className="text-xl font-black text-white">親證圓夢計劃</h4>
-                                    <p className="text-xs text-purple-300 font-bold mt-1">持有定風珠專屬 · 每週上限 3 次 · 每次 +300 修為</p>
+                                    <p className="text-xs text-purple-300 font-bold mt-1">持有定風珠專屬 · 每週上限 3 次 · 每次 +300 修為 / +30 🪙</p>
                                 </div>
                             </div>
                             <div className="flex justify-between items-center px-2">
@@ -115,7 +235,6 @@ export function WeeklyTopicTab({ systemSettings, logs, currentWeeklyMonday, isTo
                 <div className="pt-8 border-t-2 border-slate-800 border-dashed space-y-8">
                     <h3 className="text-xl font-black text-slate-400 uppercase tracking-widest text-center">⏳ 臨時加分任務</h3>
                     {temporaryQuests.map(tq => {
-                        // 特殊仙緣任務：每個日期 QuestID 全程唯一，不重置
                         const comps = logs.filter(l => l.QuestID.startsWith(tq.id)).length;
                         const isMax = comps >= 1;
                         return (
@@ -130,7 +249,10 @@ export function WeeklyTopicTab({ systemSettings, logs, currentWeeklyMonday, isTo
                                         {tq.sub && <p className="text-sm text-orange-300 font-bold mt-1">{tq.sub}</p>}
                                         {tq.desc && <p className="text-xs text-slate-400 mt-1 italic">{tq.desc}</p>}
                                     </div>
-                                    <div className="text-sm font-black text-emerald-400 bg-emerald-400/10 px-3 py-1 rounded-xl">+$ {tq.reward}</div>
+                                    <div className="text-right bg-emerald-400/10 px-3 py-2 rounded-xl">
+                                        <div className="text-sm font-black text-emerald-400">+{tq.reward} 修為</div>
+                                        <div className="text-xs font-bold text-yellow-400">+{Math.floor(tq.reward * 0.1)} 🪙</div>
+                                    </div>
                                 </div>
                                 <div className="flex justify-between items-center px-2 mx-auto">
                                     {['一', '二', '三', '四', '五', '六', '日'].map((day, idx) => {

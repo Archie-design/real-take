@@ -81,6 +81,37 @@ export interface SystemSettings {
   WorldStateMsg?: string;
 }
 
+export interface W4Application {
+  id: string;
+  user_id: string;
+  user_name: string;
+  squad_name?: string;
+  battalion_name?: string;
+  interview_target: string;
+  interview_date: string;
+  description?: string;
+  quest_id: string;
+  status: 'pending' | 'squad_approved' | 'approved' | 'rejected';
+  squad_review_by?: string;
+  squad_review_at?: string;
+  squad_review_notes?: string;
+  final_review_by?: string;
+  final_review_at?: string;
+  final_review_notes?: string;
+  created_at?: string;
+}
+
+export interface AdminLog {
+  id: string;
+  action: string;
+  actor?: string;
+  target_id?: string;
+  target_name?: string;
+  details?: Record<string, any>;
+  result?: string;
+  created_at: string;
+}
+
 export interface TopicHistory {
   id: number;
   TopicTitle: string;

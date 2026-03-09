@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { ShieldAlert, Dices } from 'lucide-react';
 import { DAILY_QUEST_CONFIG } from '@/lib/constants';
-import { TeamSettings } from '@/types';
+import { TeamSettings, W4Application } from '@/types';
 
 interface CaptainTabProps {
     teamName: string;
     teamSettings?: TeamSettings;
+    pendingW4Apps: W4Application[];
     onDrawWeeklyQuest: () => Promise<void>;
+    onReviewW4: (appId: string, approve: boolean, notes: string) => Promise<void>;
 }
 
 function getCurrentWeekMondayStr(): string {
@@ -18,8 +20,10 @@ function getCurrentWeekMondayStr(): string {
     return monday.toISOString().slice(0, 10);
 }
 
-export function CaptainTab({ teamName, teamSettings, onDrawWeeklyQuest }: CaptainTabProps) {
+export function CaptainTab({ teamName, teamSettings, pendingW4Apps, onDrawWeeklyQuest, onReviewW4 }: CaptainTabProps) {
     const [isDrawing, setIsDrawing] = useState(false);
+    const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
+    const [reviewingId, setReviewingId] = useState<string | null>(null);
 
     const weekMondayStr = getCurrentWeekMondayStr();
     const alreadyDrawnThisWeek = teamSettings?.mandatory_quest_week === weekMondayStr;
@@ -32,6 +36,13 @@ export function CaptainTab({ teamName, teamSettings, onDrawWeeklyQuest }: Captai
         setIsDrawing(true);
         await onDrawWeeklyQuest();
         setIsDrawing(false);
+    };
+
+    const handleReview = async (appId: string, approve: boolean) => {
+        setReviewingId(appId);
+        await onReviewW4(appId, approve, reviewNotes[appId] || '');
+        setReviewingId(null);
+        setReviewNotes(prev => { const n = { ...prev }; delete n[appId]; return n; });
     };
 
     return (
@@ -83,6 +94,53 @@ export function CaptainTab({ teamName, teamSettings, onDrawWeeklyQuest }: Captai
                                 );
                             })}
                         </div>
+                    </div>
+                )}
+            </section>
+
+            {/* ❤️ 傳愛分數初審 */}
+            <section className="bg-slate-900 border-2 border-pink-500/30 p-8 rounded-4xl space-y-6 shadow-xl">
+                <h3 className="text-lg font-black text-white border-b border-white/10 pb-4">❤️ 傳愛分數審核（小隊長初審）</h3>
+
+                {pendingW4Apps.length === 0 ? (
+                    <p className="text-sm text-slate-500 text-center py-4">目前無待審申請</p>
+                ) : (
+                    <div className="space-y-4">
+                        {pendingW4Apps.map(app => (
+                            <div key={app.id} className="bg-slate-800 rounded-2xl p-5 space-y-3">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <p className="font-black text-white">{app.user_name}</p>
+                                        <p className="text-xs text-slate-400">訪談：{app.interview_target} · {app.interview_date}</p>
+                                    </div>
+                                    <span className="text-[10px] font-black text-yellow-400 bg-yellow-400/10 px-2 py-1 rounded-lg">待初審</span>
+                                </div>
+                                {app.description && <p className="text-xs text-slate-400 italic">{app.description}</p>}
+                                <textarea
+                                    placeholder="備註（選填）"
+                                    value={reviewNotes[app.id] || ''}
+                                    onChange={e => setReviewNotes(prev => ({ ...prev, [app.id]: e.target.value }))}
+                                    rows={2}
+                                    className="w-full bg-slate-700 border border-slate-600 rounded-xl p-3 text-white text-xs outline-none focus:border-pink-500 resize-none"
+                                />
+                                <div className="flex gap-3">
+                                    <button
+                                        disabled={reviewingId === app.id}
+                                        onClick={() => handleReview(app.id, false)}
+                                        className="flex-1 py-2 bg-red-600/20 text-red-400 font-black rounded-xl text-sm border border-red-600/30 active:scale-95 transition-all disabled:opacity-50"
+                                    >
+                                        ❌ 駁回
+                                    </button>
+                                    <button
+                                        disabled={reviewingId === app.id}
+                                        onClick={() => handleReview(app.id, true)}
+                                        className="flex-2 py-2 bg-emerald-600 text-white font-black rounded-xl text-sm shadow-lg active:scale-95 transition-all disabled:opacity-50"
+                                    >
+                                        ✅ 初審通過
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 )}
             </section>
