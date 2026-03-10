@@ -6,15 +6,28 @@ import { differenceInCalendarWeeks, startOfYear, addWeeks, startOfWeek } from 'd
  */
 export const getLogicalDateStr = (dateInput?: Date | string): string => {
     const date = dateInput ? new Date(dateInput) : new Date();
-    const hours = date.getHours();
-    const d = new Date(date);
+    // 使用台灣時區 (UTC+8) 判斷小時，避免伺服器時區造成誤判
+    const twParts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Taipei',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        hour12: false,
+    }).formatToParts(date);
+    const get = (type: string) => twParts.find(p => p.type === type)!.value;
+    const hours = parseInt(get('hour'), 10);
+    let y = parseInt(get('year'), 10);
+    let m = parseInt(get('month'), 10);
+    let day = parseInt(get('day'), 10);
     if (hours < 12) {
+        const d = new Date(y, m - 1, day);
         d.setDate(d.getDate() - 1);
+        y = d.getFullYear();
+        m = d.getMonth() + 1;
+        day = d.getDate();
     }
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
+    return `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 };
 
 /**
