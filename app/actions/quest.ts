@@ -111,7 +111,7 @@ export async function processCheckInTransaction(
         const newLevel = calculateLevelFromExp(newExp);
         const levelDelta = newLevel - currentLevel;
 
-        let gainedCoins = Math.floor(finalQuestReward * 0.1);
+        let gainedCoins = Math.floor(baseReward * 0.1);
 
         const newCoins = currentCoins + gainedCoins;
 

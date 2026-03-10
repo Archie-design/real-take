@@ -1,7 +1,7 @@
 'use server';
 
 import { connectDb } from '@/lib/db';
-import { ARTIFACTS_CONFIG } from '@/lib/constants';
+import { ARTIFACTS_CONFIG, calculateLevelFromExp } from '@/lib/constants';
 
 export async function purchaseArtifact(userId: string, artifactId: string, teamName: string | null) {
     const config = ARTIFACTS_CONFIG.find(a => a.id === artifactId);
@@ -78,11 +78,24 @@ export async function purchaseArtifact(userId: string, artifactId: string, teamN
             const newInventory = [...currentInventory, artifactId];
             const newCoins = currentCoins - config.price;
 
-            await client.query(`
-                UPDATE "CharacterStats"
-                SET "Coins" = $1, "Inventory" = $2::jsonb
-                WHERE "UserID" = $3
-            `, [newCoins, JSON.stringify(newInventory), userId]);
+            // a1 / a5 購買時，補算過去累積總經驗 ×1.2
+            const isExpMultiplierArtifact = artifactId === 'a1' || artifactId === 'a5';
+            if (isExpMultiplierArtifact) {
+                const currentExp = parseInt(charData.Exp, 10) || 0;
+                const retroExp = Math.ceil(currentExp * 1.2);
+                const retroLevel = calculateLevelFromExp(retroExp);
+                await client.query(`
+                    UPDATE "CharacterStats"
+                    SET "Coins" = $1, "Inventory" = $2::jsonb, "Exp" = $3, "Level" = $4
+                    WHERE "UserID" = $5
+                `, [newCoins, JSON.stringify(newInventory), retroExp, retroLevel, userId]);
+            } else {
+                await client.query(`
+                    UPDATE "CharacterStats"
+                    SET "Coins" = $1, "Inventory" = $2::jsonb
+                    WHERE "UserID" = $3
+                `, [newCoins, JSON.stringify(newInventory), userId]);
+            }
         }
 
         await client.query('COMMIT');
