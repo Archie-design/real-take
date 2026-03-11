@@ -218,7 +218,9 @@ export const DAILY_QUEST_CONFIG: Quest[] = [
     { id: 'q4', title: '嗯啊吽七次', sub: '覺醒痴念', reward: 100, dice: 1 },
     { id: 'q5', title: '五感恩', sub: '放下傲慢', reward: 100, dice: 1 },
     { id: 'q6', title: '海鮮素', sub: '節制貪慾', reward: 100, dice: 1 },
-    { id: 'q7', title: '子時入睡', sub: '能量補給', reward: 100, dice: 1 }
+    { id: 'q7', title: '子時入睡', sub: '能量補給', reward: 100, dice: 1 },
+    { id: 'q8', title: '高階定課1', sub: '進階修行', reward: 100, dice: 1 },
+    { id: 'q9', title: '高階定課2', sub: '進階修行', reward: 100, dice: 1 }
 ];
 
 export const WEEKLY_QUEST_CONFIG: Quest[] = [
