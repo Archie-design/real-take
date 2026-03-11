@@ -285,9 +285,9 @@ export default function App() {
 
     setIsSyncing(true);
     try {
-      // Consume in DB if it has an ID
-      if (entity.id) {
-        await supabase.from('MapEntities').update({ is_active: false }).eq('id', entity.id);
+      // Consume in DB if it has an ID (skip monsters — combat server action handles deletion)
+      if (entity.id && entity.type !== 'monster') {
+        await supabase.from('MapEntities').delete().eq('id', entity.id);
       }
 
       if (entity.type === 'personal') {
@@ -780,15 +780,6 @@ export default function App() {
         setTemporaryQuests(parsed as TemporaryQuest[]);
       }
 
-      try {
-        const { data: pEntities, error: entErr } = await supabase.from('MapEntities').select('*').eq('is_active', true);
-        if (pEntities && !entErr) {
-          setMapEntities(pEntities);
-        }
-      } catch (e) {
-        console.error("Error fetching map entities:", e);
-      }
-
       // Fetch teammates' positions for map interaction
       const fetchTeammates = async (teamName: string, selfId: string) => {
         try {
@@ -815,6 +806,15 @@ export default function App() {
 
       const savedUid = sessionStorage.getItem('starry_session_uid');
       if (savedUid && !userData) {
+        // Fetch map entities only once on initial login (not on every userData change)
+        try {
+          const { data: pEntities, error: entErr } = await supabase.from('MapEntities').select('*').eq('is_active', true);
+          if (pEntities && !entErr) {
+            setMapEntities(pEntities);
+          }
+        } catch (e) {
+          console.error("Error fetching map entities:", e);
+        }
         const { data: stats, error } = await supabase.from('CharacterStats').select('*').eq('UserID', savedUid).single();
         if (stats && !error) {
           const { data: userLogs } = await supabase.from('DailyLogs').select('*').eq('UserID', stats.UserID);

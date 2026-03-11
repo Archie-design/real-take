@@ -220,32 +220,7 @@
 
 所有 AI 功能使用 **Gemini 2.5 Flash**（`gemini-2.5-flash`），強制回傳 `responseMimeType: "application/json"`。
 
-#### 3.6.1 AI 動態難度 (DDA) — `generatePersonalizedEncounter`
-
-- 依玩家觸碰特定地圖實體或地格時觸發。
-- AI 分析「過去 **7 天**」定課達成率，個人化生成遭遇事件，並寫入 `MapEntities`（放置於玩家鄰近隨機格，`owner_id = userId`）。
-- **事件分支**：
-  - **精進者**（高頻打卡）：生成「正向奇遇」或「精英挑戰」，對話充滿激勵/挑釁。
-  - **懈怠者**（低頻或中斷）：生成「心魔」或「障礙」，對話帶有當頭棒喝感。
-- **弱點設計**：怪物攻擊專攻玩家六維屬性中的**最低項**。
-- **回傳 JSON 格式**：
-```json
-{
-  "encounterName": "遭遇名稱",
-  "encounterType": "monster | npc | treasure",
-  "level": 15,
-  "hp": 500,
-  "narrative": "50 字描述",
-  "dialogue": "NPC 或心魔台詞",
-  "targetStat": "神識 | 根骨 | 魅力 | 悟性 | 機緣 | 潛力",
-  "effect": {
-    "statToModify": "EnergyDice | Physique | Spirit | Charisma | Savvy | Luck | Potential",
-    "value": 10
-  }
-}
-```
-
-#### 3.6.2 AI 修行週報 — `generateWeeklyReview`
+#### 3.6.1 AI 修行週報 — `generateWeeklyReview`
 
 - **觸發時機**：玩家點擊「加分副本」Tab，系統自動判斷：若本週尚無週報則呼叫 Gemini 生成，已有則直接讀取（同週不重複呼叫）。
 - **資料依據**：玩家本週 + 上週 `q` 開頭定課完成次數（上限 21 次/週），以及六維屬性最低項。
@@ -266,7 +241,7 @@
 | `content` | jsonb | `{ summary, quote, trend, weeklyRate }` |
 | `created_at` | timestamptz | 生成時間 |
 
-#### 3.6.3 AI 隊長建議 — `generateCaptainBriefing`
+#### 3.6.2 AI 隊長建議 — `generateCaptainBriefing`
 
 - **權限**：僅 `IsCaptain = true` 的玩家可使用。
 - **觸發時機**：隊長在「隊長指揮所」Tab 手動點擊「🤖 開始分析」按鈕（即時生成，不快取）。
@@ -659,7 +634,6 @@ DB Call:  直接 SQL 查詢（pool/client via node-postgres）
 | `dice.ts` | `transferGoldenDiceToTeam`, `blessChestWithGoldenDice` | 黃金骰子捐贈、開箱加持 |
 | `team.ts` | `donateDice`, `donateGoldenDice` | 玩家間骰子互贈 |
 | `items.ts` | `buyGameItem`, `useGameItem` | NPC 道具商店（使用 GameGold） |
-| `gemini.ts` | `generatePersonalizedEncounter` | AI 動態遭遇生成（DDA），寫入 MapEntities |
 | `gemini.ts` | `generateWeeklyReview` | AI 修行週報，on-demand 生成並寫入 WeeklyReviews |
 | `gemini.ts` | `generateCaptainBriefing` | AI 隊長建議，即時生成不持久化（限隊長） |
 

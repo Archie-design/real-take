@@ -10,7 +10,7 @@ const supabase = createClient(supabaseUrl, supabaseActionKey);
 
 interface CombatParams {
     attackerId: string;
-    targetId?: string; // If null, it's a procedural monster
+    targetId?: string;
     monsterData?: any;
     flankingMultiplier: number; // 1.0 default, 1.3 for flanking, 1.5 for backstab
     remainingAP: number;
@@ -170,11 +170,13 @@ export async function resolveCombat(params: CombatParams) {
 
     // 8. Handle Entity Persistence
     if (params.targetId && isVictory) {
-        await supabase.from('MapEntities').delete().eq('id', params.targetId);
+        const { error: deleteErr } = await supabase.from('MapEntities').delete().eq('id', params.targetId);
+        if (deleteErr) console.error('[combat] MapEntities delete failed:', deleteErr.message);
     } else if (params.targetId && !isVictory) {
-        await supabase.from('MapEntities')
+        const { error: hpErr } = await supabase.from('MapEntities')
             .update({ data: { ...monsterData, hp: monsterHP } })
             .eq('id', params.targetId);
+        if (hpErr) console.error('[combat] MapEntities hp update failed:', hpErr.message);
     }
 
     return {

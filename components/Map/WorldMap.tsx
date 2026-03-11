@@ -108,7 +108,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({
     userData, mapData, corridorL, corridorW, stepsRemaining, isRolling,
     onRollDice, onMoveCharacter, onBack, initialQ, initialR,
     roleTrait, todayCompletedQuestIds, onShowMessage,
-    dbEntities = [], worldState, onEntityTrigger, moveMultiplier = 1, onUpdateMultiplier, onUpdateUserData, onUpdateSteps
+    dbEntities = [], worldState, onEntityTrigger, moveMultiplier = 1, onUpdateMultiplier, onUpdateUserData, onUpdateSteps,
 }) => {
     // Navigation & Scale
     const [camX, setCamX] = useState(0);
@@ -128,32 +128,17 @@ export const WorldMap: React.FC<WorldMapProps> = ({
     const [donateAmount, setDonateAmount] = useState(1);
     const [isDonating, setIsDonating] = useState(false);
 
-    // Initialize local state from sessionStorage so they don't disappear on re-renders or accidental unmounts
-    const getStoredKeys = (storageKey: string) => {
+    const [dismissedCombatKeys, _setDismissedCombatKeys] = useState<Set<string>>(() => {
         try {
-            const data = sessionStorage.getItem(storageKey);
+            const data = sessionStorage.getItem('starry_dismissed');
             if (data) return new Set<string>(JSON.parse(data));
         } catch (e) { }
         return new Set<string>();
-    };
-    const setStoredKeys = (storageKey: string, set: Set<string>) => {
-        sessionStorage.setItem(storageKey, JSON.stringify(Array.from(set)));
-    };
-
-    const [suppressedProcKeys, _setSuppressedProcKeys] = useState<Set<string>>(() => getStoredKeys('starry_suppressed'));
-    const setSuppressedProcKeys = useCallback((setter: (prev: Set<string>) => Set<string>) => {
-        _setSuppressedProcKeys(prev => {
-            const next = setter(prev);
-            setStoredKeys('starry_suppressed', next);
-            return next;
-        });
-    }, []);
-
-    const [dismissedCombatKeys, _setDismissedCombatKeys] = useState<Set<string>>(() => getStoredKeys('starry_dismissed'));
+    });
     const setDismissedCombatKeys = useCallback((setter: (prev: Set<string>) => Set<string>) => {
         _setDismissedCombatKeys(prev => {
             const next = setter(prev);
-            setStoredKeys('starry_dismissed', next);
+            sessionStorage.setItem('starry_dismissed', JSON.stringify(Array.from(next)));
             return next;
         });
     }, []);
@@ -168,12 +153,10 @@ export const WorldMap: React.FC<WorldMapProps> = ({
     // Make the virtual canvas huge so panning works via CSS transform
     const VIRTUAL_MAP_SIZE = 6000;
 
-    // Helper to get a stable unique key for both DB and Procedural Entities
     const getEntityKey = useCallback((e: any) => {
         if (!e) return '';
-        if (e.id && String(e.id).startsWith('proc_')) return e.key;
         if (e.id) return `db_${e.id}`;
-        return e.key;
+        return e.key ?? '';
     }, []);
 
     // Jump to user initially
@@ -282,84 +265,10 @@ export const WorldMap: React.FC<WorldMapProps> = ({
     const perfLayerGrid = useMemo(() => fullGrid.filter(h => h.ring === 'performance'), [fullGrid]);
     const crispLayerGrid = useMemo(() => fullGrid.filter(h => h.ring === 'crisp'), [fullGrid]);
 
-    // Pre-compute per-hex seed data (hash + level + demon roll) — only recalculates when grid or day changes
-    const hexSeedMap = useMemo(() => {
-        const map = new Map<string, { rand: number; monLevel: number; monHP: number; isDemon: boolean }>();
-        const dayStr = new Date().toISOString().split('T')[0];
-
-        crispLayerGrid.forEach(hex => {
-            if (hex.q === 0 && hex.r === 0) return;
-
-            // Primary hash → entity type selection
-            const str = `${hex.q},${hex.r},${dayStr}`;
-            let hash = 0;
-            for (let i = 0; i < str.length; i++) hash = (Math.imul(31, hash) + str.charCodeAt(i)) | 0;
-            const rand = Math.abs(hash) % 1000 / 1000;
-
-            // Secondary hash → level
-            const strL = `${hex.q},${hex.r},${dayStr},L`;
-            let hashL = 0;
-            for (let i = 0; i < strL.length; i++) hashL = (Math.imul(31, hashL) + strL.charCodeAt(i)) | 0;
-            const monLevel = (Math.abs(hashL) % 10) + 1;
-            const monHP = 50 + monLevel * 15;
-
-            // Tertiary hash → demon roll
-            let isDemon = false;
-            const zoneId = hex.zoneId;
-            if (zoneId === 'anger' || zoneId === 'chaos') {
-                const strD = `${hex.q},${hex.r},${dayStr},D`;
-                let hashD = 0;
-                for (let i = 0; i < strD.length; i++) hashD = (Math.imul(31, hashD) + strD.charCodeAt(i)) | 0;
-                const demonRoll = (Math.abs(hashD) % 100) / 100;
-                isDemon = zoneId === 'anger' ? demonRoll < 0.3 : demonRoll < 0.2;
-            }
-
-            map.set(hex.key, { rand, monLevel, monHP, isDemon });
-        });
-        return map;
-    }, [crispLayerGrid]); // dayStr is stable within a day; crispLayerGrid changes only on map reload
-
-    // Generate Procedural Entities based on WorldState (reads from cached seed map)
-    const proceduralEntities = useMemo(() => {
-        const entities: any[] = [];
-        if (!worldState) return entities;
-        const chanceChest = worldState === 'good' ? 0.05 : worldState === 'bad' ? 0.01 : 0.02;
-        const chanceMonster = worldState === 'good' ? 0.01 : worldState === 'bad' ? 0.08 : 0.02;
-
-        crispLayerGrid.forEach(hex => {
-            if (hex.q === 0 && hex.r === 0) return;
-            if (suppressedProcKeys.has(hex.key)) return;
-
-            const seed = hexSeedMap.get(hex.key);
-            if (!seed) return;
-            const { rand, monLevel, monHP, isDemon } = seed;
-
-            if (rand < chanceChest) {
-                entities.push({ id: `proc_treasure_${hex.key}`, q: hex.q, r: hex.r, type: 'treasure', icon: '🎁', name: '神秘寶箱', key: hex.key });
-            } else if (rand < chanceChest + chanceMonster) {
-                const zoneId = hex.zoneId;
-                const monType = isDemon ? 'demon' : 'normal';
-                const monIcon = isDemon ? '👹' : '🐉';
-                const monName = isDemon ? '心魔' : '野生妖獸';
-                entities.push({
-                    id: `proc_monster_${hex.key}`, q: hex.q, r: hex.r, type: 'monster',
-                    icon: monIcon, name: monName, key: hex.key,
-                    data: { level: monLevel, hp: monHP, type: monType, zone: zoneId }
-                });
-            } else {
-                // Portal chance: 1% but ONLY if distance from center > 15
-                const dist = Math.max(Math.abs(hex.q), Math.abs(hex.r), Math.abs(hex.q + hex.r));
-                if (dist > 15 && rand > 0.99) {
-                    entities.push({ id: `proc_portal_${hex.key}`, q: hex.q, r: hex.r, type: 'portal', icon: '⛩️', name: '歸心陣', key: hex.key });
-                }
-            }
-        });
-        return entities;
-    }, [crispLayerGrid, worldState, suppressedProcKeys, hexSeedMap]);
     // Check Entity Collision after movement
     useEffect(() => {
         if (onEntityTrigger && !isCombatModalOpen) {
-            const allEntities = [...dbEntities.filter(e => e.is_active !== false && (!e.owner_id || e.owner_id === userData.UserID)), ...proceduralEntities];
+            const allEntities = dbEntities.filter(e => e.is_active !== false && (e.type === 'monster' || !e.owner_id || e.owner_id === userData.UserID));
 
             // 1. Proactive Interception: Check for monsters in adjacent hexes (dist === 1)
             const currentPosKey = `${userData.CurrentQ},${userData.CurrentR}`;
@@ -367,8 +276,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({
                 const neighborMonster = allEntities.find(e =>
                     e.type === 'monster' &&
                     getHexDist(userData.CurrentQ, userData.CurrentR, e.q, e.r) === 1 &&
-                    !dismissedCombatKeys.has(getEntityKey(e)) &&
-                    !suppressedProcKeys.has(e.key)
+                    !dismissedCombatKeys.has(getEntityKey(e))
                 );
 
                 if (neighborMonster) {
@@ -376,7 +284,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({
                     const flanking = getCombatMultiplier({ q: userData.CurrentQ, r: userData.CurrentR }, { q: neighborMonster.q, r: neighborMonster.r }, targetFacing);
                     setCombatFlankingMultiplier(flanking);
                     setCombatTarget(neighborMonster);
-                    setInterceptTriggeredPos(currentPosKey); // Prevent other monsters from immediately jumping the player on this same tile
+                    setInterceptTriggeredPos(currentPosKey);
                     setIsCombatModalOpen(true);
                     return;
                 }
@@ -389,20 +297,14 @@ export const WorldMap: React.FC<WorldMapProps> = ({
                     if (exactMatch.type === 'portal') {
                         if (!todayCompletedQuestIds || todayCompletedQuestIds.length === 0) {
                             onShowMessage('受五毒業力牽引，歸心陣無法啟動。請先完成今日定課。', 'error');
-                            // Do not suppress the portal so it remains visible
-                            // Return early so we don't trigger the entity handler yet
                             return;
                         }
-                    }
-
-                    if (exactMatch.key) {
-                        setSuppressedProcKeys(prev => new Set(prev).add(exactMatch.key));
                     }
                     onEntityTrigger(exactMatch);
                 }
             }
         }
-    }, [userData.CurrentQ, userData.CurrentR, stepsRemaining, isCombatModalOpen, dbEntities, proceduralEntities, onEntityTrigger, dismissedCombatKeys, suppressedProcKeys]);
+    }, [userData.CurrentQ, userData.CurrentR, stepsRemaining, isCombatModalOpen, dbEntities, onEntityTrigger, dismissedCombatKeys]);
 
 
     // --- Event Delegation ---
@@ -480,7 +382,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({
                 const hex = getCurrentPointerHex(clientX, clientY);
                 if (hex) {
                     // Check for targetable adjacent entities first
-                    const allEntities = [...dbEntities, ...proceduralEntities];
+                    const allEntities = [...dbEntities];
 
                     // Check for adjacent teammate → open donation
                     const teammateEntity = allEntities.find(e => e.q === hex.q && e.r === hex.r && e.type === 'teammate');
@@ -542,7 +444,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({
                             let actualCost = finalCost;
 
                             const path = hexLineDraw({ q: userData.CurrentQ, r: userData.CurrentR }, { q: targetQ, r: targetR });
-                            const allEntitiesForCollision = [...dbEntities.filter(e => e.is_active !== false && (!e.owner_id || e.owner_id === userData.UserID)), ...proceduralEntities];
+                            const allEntitiesForCollision = [...dbEntities.filter(e => e.is_active !== false && (e.type === 'monster' || !e.owner_id || e.owner_id === userData.UserID))];
 
                             for (let i = 1; i < path.length; i++) {
                                 const step = path[i];
@@ -579,7 +481,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({
             }
         }
         isDragging.current = false;
-    }, [getCurrentPointerHex, stepsRemaining, userData, onMoveCharacter, roleTrait, fullGrid, onShowMessage, dbEntities, proceduralEntities]);
+    }, [getCurrentPointerHex, stepsRemaining, userData, onMoveCharacter, roleTrait, fullGrid, onShowMessage, dbEntities]);
 
     const handleWheel = useCallback((e: React.WheelEvent) => {
         setZoom(prev => Math.min(Math.max(0.3, prev - Math.sign(e.deltaY) * 0.1), 3));
@@ -659,16 +561,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({
 
                         {/* 2.5 Entities Layer (Monsters, Chests, Encounters) */}
                         <g style={{ pointerEvents: 'none' }}>
-                            {proceduralEntities.map((e, idx) => {
-                                const pos = axialToPixelPos(e.q, e.r, DEFAULT_CONFIG.HEX_SIZE_WORLD);
-                                return (
-                                    <text key={`ent_${idx}`} x={pos.x} y={pos.y + 4} textAnchor="middle" fontSize={12} className="drop-shadow-md">
-                                        {e.icon}
-                                    </text>
-                                );
-                            })}
-
-                            {dbEntities.filter(e => !e.owner_id || e.owner_id === userData.UserID).map((e, idx) => {
+                            {dbEntities.filter(e => e.type === 'monster' || !e.owner_id || e.owner_id === userData.UserID).map((e) => {
                                 const pos = axialToPixelPos(e.q, e.r, DEFAULT_CONFIG.HEX_SIZE_WORLD);
                                 if (e.type === 'personal') {
                                     return (
@@ -787,7 +680,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({
 
             {/* Hover Tooltip for Entities */}
             {hoveredHexPos && (() => {
-                const targetEntity = [...dbEntities, ...proceduralEntities].find(e => e.q === hoveredHexPos.q && e.r === hoveredHexPos.r);
+                const targetEntity = dbEntities.find(e => e.q === hoveredHexPos.q && e.r === hoveredHexPos.r);
                 if (!targetEntity) return null;
 
                 const isObscured = roleTrait?.name === '沙悟淨' && roleTrait?.isCursed;
@@ -867,23 +760,24 @@ export const WorldMap: React.FC<WorldMapProps> = ({
 
                         if (res.success) {
                             onShowMessage(res.message, res.isVictory ? 'success' : 'info');
+
+                            if (res.isVictory && combatTarget.key) {
+                                setDismissedCombatKeys(prev => new Set(prev).add(getEntityKey(combatTarget)));
+                            }
+
+                            // Close modal BEFORE parent callbacks to avoid stale-state re-render race
+                            setIsCombatModalOpen(false);
+                            if (onUpdateSteps) onUpdateSteps(0);
+
+                            // Now safe to call parent — local state is already queued
                             onUpdateUserData({
                                 HP: res.newHP,
                                 ...(res.isVictory ? { GameGold: (userData.GameGold || 0) + (res.coinReward || 0) } : {}),
                                 ...(res.isVictory && combatTarget.id ? { removeEntityId: combatTarget.id } : {})
                             } as any);
                             if (res.isVictory && onEntityTrigger) {
-                                if (combatTarget.key) {
-                                    // Also add to dismissed to handle intercept cases
-                                    setDismissedCombatKeys(prev => new Set(prev).add(getEntityKey(combatTarget)));
-                                    setSuppressedProcKeys(prev => new Set(prev).add(combatTarget.key));
-                                }
                                 onEntityTrigger(combatTarget);
                             }
-                            // Movement AP (Steps) are consumed entirely in a combo attack
-                            if (onUpdateSteps) onUpdateSteps(0);
-                            setIsCombatModalOpen(false);
-                            // EnergyDice is NOT touched here, it was already spent during the roll.
                         }
                     } catch (e: any) {
                         onShowMessage(e.message, 'error');

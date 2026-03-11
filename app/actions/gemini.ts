@@ -7,141 +7,6 @@ import type { WeeklyReview, CaptainBriefing } from '@/types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-export async function generatePersonalizedEncounter(userId: string) {
-    if (!process.env.GEMINI_API_KEY) {
-        return { success: false, error: "GEMINI_API_KEY 未設定，無法生成動態遭遇。" };
-    }
-
-    
-    const client = await connectDb();
-
-    try {
-        // 1. Fetch User Stats
-        const statsRes = await client.query(`SELECT * FROM "CharacterStats" WHERE "UserID" = $1`, [userId]);
-        if (statsRes.rowCount === 0) throw new Error("無效的使用者");
-        const user = statsRes.rows[0];
-
-        // 2. Fetch last 7 days Logs
-        const past7Date = new Date();
-        past7Date.setDate(past7Date.getDate() - 7);
-        const logsRes = await client.query(`
-            SELECT "QuestID", "QuestTitle", "Timestamp" FROM "DailyLogs" 
-            WHERE "UserID" = $1 AND "Timestamp" >= $2
-            ORDER BY "Timestamp" ASC
-        `, [userId, past7Date.toISOString()]);
-
-        const logs = logsRes.rows;
-
-        // 3. Prepare AI Prompt
-        const prompt = `
-你是一位《星光西遊》遊戲的動態難度生成器 (DDA)。這款遊戲的核心在於「藉假修真」，結合現實生活中的習慣養成與遊戲內的數值成長。
-目前有一名玩家觸發了「動態遭遇」，請根據他/她過去 7 天的定課紀錄與角色數值，生成一個高度客製化的事件（隨機在地圖鄰近格子生成一個 NPC 或怪物，伴隨對話與獎勵/懲罰）。
-
-【玩家資訊】
-姓名：${user.Name}
-角色定位：${user.Role} (Level ${user.Level}, 經驗值 ${user.Exp})
-目前屬性：
-- 根骨 (Physique): ${user.Physique}
-- 神識 (Spirit): ${user.Spirit}
-- 魅力 (Charisma): ${user.Charisma}
-- 悟性 (Savvy): ${user.Savvy}
-- 機緣 (Luck): ${user.Luck}
-- 潛力 (Potential): ${user.Potential}
-
-【近 7 天定課紀錄】
-總完成次數：${logs.length} / 21
-詳細紀錄：
-${logs.map(l => `- ${new Date(l.Timestamp).toLocaleDateString()} : ${l.QuestTitle}`).join('\n')}
-
-【生成要求】
-1. 分析該玩家是屬於「精進者 (高頻率打卡)」還是「懈怠者 (低頻率或中斷打卡)」。
-2. 精進者：生成「正向奇遇」或「精英挑戰」。對話應充滿敬意與激勵。
-3. 懈怠者：生成「心魔」或「障礙」。對話應帶有當頭棒喝、提醒其現實痛點的感覺。
-4. **致命弱點設計**：識別玩家六維屬性中的**最低項**。如果生成怪物，該怪物的攻擊必須設計為專攻該弱點。
-5. **等級與數值**：
-   - 必勝心魔怪：等級應低於玩家，對話帶有溫暖提示。
-   - 精英挑戰怪：等級可高於玩家，對話充滿挑釁。
-6. 絕對不可修改「Exp (修為)」。
-
-請嚴格回傳一個格式正確的純 JSON 字串，不要使用 Markdown 標籤，格式如下：
-{
-  "encounterName": "遭遇名稱",
-  "encounterType": "monster" | "npc" | "treasure",
-  "level": 15, // 建議等級
-  "hp": 500, // 怪物生命值 (若為怪物)
-  "narrative": "50 字左右描述",
-  "dialogue": "NPC 或心魔台詞",
-  "targetStat": "神識" | "根骨" | "魅力" | "悟性" | "機緣" | "潛力", // 針對的弱點
-  "effect": {
-    "statToModify": "EnergyDice" | "Physique" | "Spirit" | "Charisma" | "Savvy" | "Luck" | "Potential",
-    "value": 10
-  }
-}
-`;
-
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: {
-                // Ensure structured JSON output
-                responseMimeType: "application/json",
-            }
-        });
-
-        const textResponse = response.text;
-        if (!textResponse) throw new Error("AI 未回應內容");
-
-        const encounterData = JSON.parse(textResponse);
-
-        // Persist the AI encounter as a MapEntities record near the player
-        let entityId: string | null = null;
-        if (encounterData.encounterType === 'monster' || encounterData.encounterType === 'npc') {
-            try {
-                // Place on a random adjacent hex (one of 6 axial directions)
-                const directions = [
-                    { dq: 1, dr: 0 }, { dq: -1, dr: 0 },
-                    { dq: 0, dr: 1 }, { dq: 0, dr: -1 },
-                    { dq: 1, dr: -1 }, { dq: -1, dr: 1 }
-                ];
-                const dir = directions[Math.floor(Math.random() * directions.length)];
-                const eq = (user.CurrentQ || 0) + dir.dq;
-                const er = (user.CurrentR || 0) + dir.dr;
-
-                const icon = encounterData.encounterType === 'monster' ? '👹' : '🧙';
-                const insertRes = await client.query(`
-                    INSERT INTO "MapEntities" (q, r, type, name, icon, data, owner_id, is_active)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, true)
-                    RETURNING id
-                `, [
-                    eq, er,
-                    encounterData.encounterType,
-                    encounterData.encounterName,
-                    icon,
-                    JSON.stringify({
-                        level: encounterData.level,
-                        hp: encounterData.hp,
-                        type: 'demon',
-                        narrative: encounterData.narrative,
-                        dialogue: encounterData.dialogue,
-                        targetStat: encounterData.targetStat,
-                        effect: encounterData.effect,
-                    }),
-                    userId
-                ]);
-                entityId = insertRes.rows[0]?.id ?? null;
-            } catch (_) { /* non-critical: log but don't fail */ }
-        }
-
-        return { success: true, encounter: encounterData, entityId };
-
-    } catch (error: any) {
-        console.error("Gemini DDA Error:", error);
-        return { success: false, error: error.message };
-    } finally {
-        await client.end();
-    }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // AI 修行週報
 // ─────────────────────────────────────────────────────────────────────────────
@@ -176,7 +41,16 @@ export async function generateWeeklyReview(
 
         const weekLabel = thisWeekMonday.toISOString().slice(0, 10);
 
-        // 3. Fetch this week's daily quest logs (q1~q7 only)
+        // 3. Check DB cache first — avoid calling Gemini if review already exists this week
+        const cachedRes = await client.query(
+            `SELECT content FROM "WeeklyReviews" WHERE user_id = $1 AND week_label = $2`,
+            [userId, weekLabel]
+        );
+        if ((cachedRes.rowCount ?? 0) > 0) {
+            return { success: true, review: cachedRes.rows[0].content as WeeklyReview, weekLabel };
+        }
+
+        // 4. Fetch this week's daily quest logs (q1~q7 only)  [fresh — no cache]
         const thisLogsRes = await client.query(`
             SELECT "QuestTitle", "Timestamp" FROM "DailyLogs"
             WHERE "UserID" = $1
@@ -185,7 +59,7 @@ export async function generateWeeklyReview(
             ORDER BY "Timestamp" ASC
         `, [userId, thisWeekMonday.toISOString(), nextWeekMonday.toISOString()]);
 
-        // 4. Fetch previous week's daily quest logs
+        // 5. Fetch previous week's daily quest logs
         const prevLogsRes = await client.query(`
             SELECT "QuestTitle", "Timestamp" FROM "DailyLogs"
             WHERE "UserID" = $1
@@ -196,7 +70,7 @@ export async function generateWeeklyReview(
         const thisLogs = thisLogsRes.rows;
         const prevLogs = prevLogsRes.rows;
 
-        // 5. Derive trend and weakest stat
+        // 6. Derive trend and weakest stat
         const thisRate = thisLogs.length / 21;
         const prevRate = prevLogs.length / 21;
         const delta = thisRate - prevRate;
@@ -259,7 +133,7 @@ ${thisLogs.map(l => `- ${new Date(l.Timestamp).toLocaleDateString('zh-TW', { mon
         // Ensure trend is one of the valid values
         if (!['up', 'down', 'stable'].includes(review.trend)) review.trend = trend;
 
-        // 6. Upsert to WeeklyReviews
+        // 7. Upsert to WeeklyReviews
         await client.query(`
             INSERT INTO "WeeklyReviews" (user_id, week_label, content)
             VALUES ($1, $2, $3)
@@ -298,7 +172,26 @@ export async function generateCaptainBriefing(
         if (!captain.IsCaptain) return { success: false, error: '非隊長無法使用此功能' };
         if (!captain.TeamName) return { success: false, error: '尚未分配小隊' };
 
-        // 2. Fetch all team members
+        // 2. Compute this week's label (Taiwan timezone Monday)
+        const now = new Date();
+        const twFormatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Taipei',
+            year: 'numeric', month: '2-digit', day: '2-digit',
+        });
+        const twDate = new Date(twFormatter.format(now) + 'T00:00:00');
+        const thisWeekMonday = getWeeklyMonday(twDate);
+        const weekLabel = thisWeekMonday.toISOString().slice(0, 10);
+
+        // 3. Check DB cache — return early if this captain already has a briefing this week
+        const cachedRes = await client.query(
+            `SELECT content FROM "CaptainBriefings" WHERE user_id = $1 AND week_label = $2`,
+            [captainUserId, weekLabel]
+        );
+        if ((cachedRes.rowCount ?? 0) > 0) {
+            return { success: true, briefing: cachedRes.rows[0].content as CaptainBriefing };
+        }
+
+        // 4. Fetch all team members
         const membersRes = await client.query(
             `SELECT * FROM "CharacterStats" WHERE "TeamName" = $1 ORDER BY "Level" DESC`,
             [captain.TeamName]
@@ -306,7 +199,7 @@ export async function generateCaptainBriefing(
         const members = membersRes.rows;
         if (members.length === 0) return { success: false, error: '小隊目前無成員' };
 
-        // 3. Batch-fetch last 7 days logs for all members (avoid N+1)
+        // 5. Batch-fetch last 7 days logs for all members (avoid N+1)
         const past7Date = new Date(Date.now() - 7 * 86400 * 1000).toISOString();
         const memberIds = members.map((m: any) => m.UserID);
         const logsRes = await client.query(`
@@ -317,14 +210,14 @@ export async function generateCaptainBriefing(
             ORDER BY "UserID", "Timestamp" ASC
         `, [memberIds, past7Date]);
 
-        // 4. Group logs by UserID
+        // 6. Group logs by UserID
         const logsByUser = new Map<string, any[]>();
         for (const log of logsRes.rows) {
             if (!logsByUser.has(log.UserID)) logsByUser.set(log.UserID, []);
             logsByUser.get(log.UserID)!.push(log);
         }
 
-        // 5. Compute team average + identify top/support
+        // 7. Compute team average + identify top/support
         const memberStats = members.map((m: any) => ({
             name: m.Name,
             role: m.Role,
@@ -377,6 +270,13 @@ ${memberStats.map((m: any) => `- ${m.name}（${m.role}，Lv${m.level}）：完�
         if (!textResponse) throw new Error('AI 未回應內容');
         const briefing: CaptainBriefing = JSON.parse(textResponse);
         if (!['high', 'medium', 'low'].includes(briefing.teamMorale)) briefing.teamMorale = teamMorale;
+
+        // 8. Upsert to CaptainBriefings
+        await client.query(`
+            INSERT INTO "CaptainBriefings" (user_id, week_label, content)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (user_id, week_label) DO UPDATE SET content = EXCLUDED.content
+        `, [captainUserId, weekLabel, JSON.stringify(briefing)]);
 
         return { success: true, briefing };
 
