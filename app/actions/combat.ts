@@ -105,6 +105,8 @@ export async function resolveCombat(params: CombatParams) {
 
     // 7. Update Database (Rewards + HP)
     let coinReward = 0;
+    let totalDiceReward = 0;
+    let goldenDiceReward = 0;
     let rewardMsg = "";
     if (isVictory) {
         // Rewards Calculation (戰鬥不給經驗值，只給金幣與道具)
@@ -125,8 +127,8 @@ export async function resolveCombat(params: CombatParams) {
             isServerWideDrop = Math.random() < 0.05;
         }
 
-        const totalDiceReward = baseDiceReward + demonDiceBonus;
-        const goldenDiceReward = Math.random() < 0.02 ? 1 : 0;
+        totalDiceReward = baseDiceReward + demonDiceBonus;
+        goldenDiceReward = Math.random() < 0.02 ? 1 : 0;
 
         // Individual Update
         const { error: rewardErr } = await supabase.rpc('add_combat_rewards', {
@@ -186,6 +188,8 @@ export async function resolveCombat(params: CombatParams) {
         totalMonsterDamage,
         newHP,
         coinReward: isVictory ? coinReward : 0,
+        diceReward: totalDiceReward,
+        goldenDiceReward,
         monsterRemainingHP: Math.max(0, monsterHP),
         battleLog,
         message: isVictory 

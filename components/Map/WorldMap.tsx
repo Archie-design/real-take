@@ -772,7 +772,11 @@ export const WorldMap: React.FC<WorldMapProps> = ({
                             // Now safe to call parent — local state is already queued
                             onUpdateUserData({
                                 HP: res.newHP,
-                                ...(res.isVictory ? { GameGold: (userData.GameGold || 0) + (res.coinReward || 0) } : {}),
+                                ...(res.isVictory ? {
+                                    GameGold: (userData.GameGold || 0) + (res.coinReward || 0),
+                                    EnergyDice: (userData.EnergyDice || 0) + (res.diceReward || 0),
+                                    GoldenDice: (userData.GoldenDice || 0) + (res.goldenDiceReward || 0),
+                                } : {}),
                                 ...(res.isVictory && combatTarget.id ? { removeEntityId: combatTarget.id } : {})
                             } as any);
                             if (res.isVictory && onEntityTrigger) {
