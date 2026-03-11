@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Quest, DailyLog, SystemSettings, TemporaryQuest, W4Application } from '@/types';
+import { Quest, DailyLog, SystemSettings, TemporaryQuest, W4Application, WeeklyReview } from '@/types';
 import { WEEKLY_QUEST_CONFIG } from '@/lib/constants';
 import { getLogicalDateStr } from '@/lib/utils/time';
 
@@ -11,6 +11,8 @@ interface WeeklyTopicTabProps {
     temporaryQuests: TemporaryQuest[];
     userInventory: string[];
     w4Applications: W4Application[];
+    weeklyReview: WeeklyReview | null;
+    isLoadingReview: boolean;
     onCheckIn: (q: Quest) => void;
     onUndo: (q: Quest) => void;
     onSubmitW4: (data: { interviewTarget: string; interviewDate: string; description: string }) => Promise<void>;
@@ -23,7 +25,7 @@ const W4_STATUS_LABELS: Record<string, { label: string; color: string }> = {
     rejected: { label: '🔴 已駁回', color: 'text-red-400' },
 };
 
-export function WeeklyTopicTab({ systemSettings, logs, currentWeeklyMonday, isTopicDone, temporaryQuests, userInventory, w4Applications, onCheckIn, onUndo, onSubmitW4 }: WeeklyTopicTabProps) {
+export function WeeklyTopicTab({ systemSettings, logs, currentWeeklyMonday, isTopicDone, temporaryQuests, userInventory, w4Applications, weeklyReview, isLoadingReview, onCheckIn, onUndo, onSubmitW4 }: WeeklyTopicTabProps) {
     const [showW4Form, setShowW4Form] = useState(false);
     const [w4Target, setW4Target] = useState('');
     const [w4Date, setW4Date] = useState(getLogicalDateStr(new Date()));
@@ -43,6 +45,36 @@ export function WeeklyTopicTab({ systemSettings, logs, currentWeeklyMonday, isTo
 
     return (
         <div className="space-y-8 animate-in slide-in-from-right-8 duration-500 text-center mx-auto text-center">
+
+            {/* ── AI 修行週報 ── */}
+            {isLoadingReview ? (
+                <div className="p-6 rounded-4xl border-2 border-indigo-500/30 bg-indigo-950/20 flex items-center justify-center gap-3 text-indigo-400 text-sm font-bold">
+                    <span className="animate-spin text-xl">🔮</span> AI 正在推演本週修行覆盤…
+                </div>
+            ) : weeklyReview ? (
+                <div className="p-6 rounded-4xl border-2 border-indigo-500/40 bg-indigo-950/20 shadow-2xl space-y-4 text-left">
+                    <div className="flex items-center gap-3">
+                        <span className="text-3xl">🔮</span>
+                        <div>
+                            <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">AI 修行週報</span>
+                            <h3 className="text-lg font-black text-white">本週覆盤</h3>
+                        </div>
+                        <span className={`ml-auto text-xs font-black px-3 py-1 rounded-lg ${
+                            weeklyReview.trend === 'up' ? 'bg-emerald-500/20 text-emerald-400' :
+                            weeklyReview.trend === 'down' ? 'bg-red-500/20 text-red-400' :
+                            'bg-slate-700 text-slate-400'
+                        }`}>
+                            {weeklyReview.trend === 'up' ? '精進中 ↑' : weeklyReview.trend === 'down' ? '懈怠中 ↓' : '持平 →'}
+                            {' '}{Math.round(weeklyReview.weeklyRate * 100)}%
+                        </span>
+                    </div>
+                    <p className="text-sm text-slate-300 leading-relaxed">{weeklyReview.summary}</p>
+                    <blockquote className="border-l-2 border-indigo-500 pl-4 text-xs text-indigo-300 italic font-bold">
+                        {weeklyReview.quote}
+                    </blockquote>
+                </div>
+            ) : null}
+
             <div className="p-8 rounded-4xl border-2 border-yellow-500/50 bg-yellow-500/5 shadow-2xl relative overflow-hidden text-center mx-auto">
                 <div className="flex items-center gap-6 mb-6 text-left text-center justify-center">
                     <div className="text-6xl mx-auto">🎯</div>

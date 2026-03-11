@@ -29,7 +29,7 @@ import { processCheckInTransaction } from '@/app/actions/quest';
 import { triggerWeeklySnapshot, importRostersData, checkWeeklyW3Compliance, autoAssignSquadsForTesting, logAdminAction } from '@/app/actions/admin';
 import { drawWeeklyQuestForSquad, autoDrawAllSquads } from '@/app/actions/team';
 import { submitW4Application, reviewW4BySquadLeader, reviewW4ByAdmin, getW4Applications, getAdminActivityLog } from '@/app/actions/w4';
-import { generatePersonalizedEncounter } from '@/app/actions/gemini';
+import { generateWeeklyReview, generateCaptainBriefing } from '@/app/actions/gemini';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -77,6 +77,12 @@ export default function App() {
   const [personalEncounter, setPersonalEncounter] = useState<any>(null);
   const [w4Applications, setW4Applications] = useState<W4Application[]>([]);
   const [pendingW4Apps, setPendingW4Apps] = useState<W4Application[]>([]);
+
+  // AI features state
+  const [weeklyReview, setWeeklyReview] = useState<import('@/types').WeeklyReview | null>(null);
+  const [isLoadingReview, setIsLoadingReview] = useState(false);
+  const [aiBriefing, setAiBriefing] = useState<import('@/types').CaptainBriefing | null>(null);
+  const [isLoadingBriefing, setIsLoadingBriefing] = useState(false);
   const [squadApprovedW4Apps, setSquadApprovedW4Apps] = useState<W4Application[]>([]);
   const [adminLogs, setAdminLogs] = useState<AdminLog[]>([]);
 
@@ -209,6 +215,35 @@ export default function App() {
     }
   };
 
+  const handleOpenWeeklyTab = async () => {
+    setActiveTab('weekly');
+    if (!userData?.UserID || weeklyReview !== null || isLoadingReview) return;
+    setIsLoadingReview(true);
+    try {
+      const res = await generateWeeklyReview(userData.UserID);
+      if (res.success && res.review) setWeeklyReview(res.review);
+    } catch (_) { /* non-critical, silently skip */ } finally {
+      setIsLoadingReview(false);
+    }
+  };
+
+  const handleGetAIBriefing = async () => {
+    if (!userData?.UserID || !userData.IsCaptain) return;
+    setIsLoadingBriefing(true);
+    try {
+      const res = await generateCaptainBriefing(userData.UserID);
+      if (res.success && res.briefing) {
+        setAiBriefing(res.briefing);
+      } else {
+        setModalMessage({ text: res.error || 'AI 分析失敗，請稍後再試', type: 'error' });
+      }
+    } catch (e: any) {
+      setModalMessage({ text: '系統異常：' + e.message, type: 'error' });
+    } finally {
+      setIsLoadingBriefing(false);
+    }
+  };
+
   const handleAutoAssignSquads = async () => {
     if (!confirm("確定要將所有玩家隨機分配大隊 / 小隊？（每隊 4 人，3 隊一大隊，會覆蓋現有編組）")) return;
     setIsSyncing(true);
@@ -239,42 +274,6 @@ export default function App() {
       }
     } catch (e: any) {
       setModalMessage({ text: '系統異常：' + e.message, type: 'error' });
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  const handleTriggerDivination = async () => {
-    if (!userData) return;
-    setIsSyncing(true);
-    setModalMessage({ text: "🔮 AI 觀因果推演中...", type: 'info' });
-    try {
-      const res = await generatePersonalizedEncounter(userData.UserID);
-      if (res.success && res.encounter) {
-        const { encounter } = res;
-
-        // Apply effect locally (it's not yet applied in DB by gemini.ts)
-        if (encounter.effect) {
-          const { statToModify, value } = encounter.effect;
-          setUserData(prev => {
-            if (!prev) return prev;
-            const newVal = (prev[statToModify as keyof CharacterStats] as number || 0) + value;
-            return { ...prev, [statToModify]: newVal };
-          });
-
-          // Also sync to DB
-          await supabase.from('CharacterStats').update({ [statToModify]: (userData[statToModify as keyof CharacterStats] as number || 0) + value }).eq('UserID', userData.UserID);
-        }
-
-        setModalMessage({
-          text: `🔮 因果啟示：【${encounter.encounterName}】\n\n${encounter.narrative}\n\n「${encounter.dialogue}」\n\n影響：${encounter.effect?.statToModify} ${encounter.effect?.value > 0 ? '+' : ''}${encounter.effect?.value}`,
-          type: 'success'
-        });
-      } else {
-        setModalMessage({ text: "因果蒙蔽，無法推演: " + res.error, type: 'error' });
-      }
-    } catch (e: any) {
-      setModalMessage({ text: "系統異常：" + e.message, type: 'error' });
     } finally {
       setIsSyncing(false);
     }
@@ -882,7 +881,7 @@ export default function App() {
 
       <nav className="sticky top-0 z-20 bg-slate-950/90 backdrop-blur-md flex p-4 gap-2 border-b border-white/5 shadow-xl overflow-x-auto no-scrollbar">
         <button onClick={() => setActiveTab('daily')} className={`shrink-0 px-6 py-4 rounded-2xl text-xs font-black transition-all ${activeTab === 'daily' ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/20' : 'bg-slate-900 text-slate-500'}`}>修行定課</button>
-        <button onClick={() => setActiveTab('weekly')} className={`shrink-0 px-6 py-4 rounded-2xl text-xs font-black transition-all ${activeTab === 'weekly' ? 'bg-orange-600 text-white shadow-lg' : 'bg-slate-900 text-slate-50'}`}>加分副本</button>
+        <button onClick={handleOpenWeeklyTab} className={`shrink-0 px-6 py-4 rounded-2xl text-xs font-black transition-all ${activeTab === 'weekly' ? 'bg-orange-600 text-white shadow-lg' : 'bg-slate-900 text-slate-50'}`}>加分副本</button>
         <button onClick={() => setActiveTab('shop')} className={`shrink-0 px-6 py-4 rounded-2xl text-xs font-black transition-all ${activeTab === 'shop' ? 'bg-yellow-600 text-white shadow-lg shadow-yellow-600/20' : 'bg-slate-900 text-slate-50'}`}>🏪藏寶閣</button>
         <button onClick={() => setActiveTab('rank')} className={`shrink-0 px-6 py-4 rounded-2xl text-xs font-black transition-all ${activeTab === 'rank' ? 'bg-orange-600 text-white shadow-lg' : 'bg-slate-900 text-slate-50'}`}>修為榜</button>
         <button onClick={() => setActiveTab('stats')} className={`shrink-0 px-6 py-4 rounded-2xl text-xs font-black transition-all ${activeTab === 'stats' ? 'bg-orange-600 text-white shadow-lg' : 'bg-slate-900 text-slate-50'}`}>六維與罰金</button>
@@ -912,6 +911,8 @@ export default function App() {
             temporaryQuests={temporaryQuests.filter(t => t.active)}
             userInventory={typeof userData?.Inventory === 'string' ? JSON.parse(userData.Inventory) : (userData?.Inventory || [])}
             w4Applications={w4Applications}
+            weeklyReview={weeklyReview}
+            isLoadingReview={isLoadingReview}
             onCheckIn={handleCheckInAction}
             onUndo={setUndoTarget}
             onSubmitW4={handleSubmitW4}
@@ -935,6 +936,9 @@ export default function App() {
             pendingW4Apps={pendingW4Apps}
             onDrawWeeklyQuest={handleDrawWeeklyQuest}
             onReviewW4={handleReviewW4BySquad}
+            onGetAIBriefing={handleGetAIBriefing}
+            aiBriefing={aiBriefing}
+            isLoadingBriefing={isLoadingBriefing}
           />
         )}
       </main>
@@ -1046,8 +1050,7 @@ export default function App() {
           roleTrait={roleTrait}
           todayCompletedQuestIds={todayCompletedQuestIds}
           onShowMessage={(msg, type) => setModalMessage({ text: msg, type })}
-          onTriggerDivination={handleTriggerDivination}
-          dbEntities={mapEntities}
+dbEntities={mapEntities}
           worldState={systemSettings.WorldState}
           onEntityTrigger={handleEntityTrigger}
           onUpdateUserData={(data) => {

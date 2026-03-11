@@ -22,7 +22,6 @@ interface WorldMapProps {
     onRollDice: (amount: number) => void;
     onMoveCharacter: (q: number, r: number, dist: number, zoneId?: string, newFacing?: number) => void;
     onBack: () => void;
-    onTriggerDivination: () => void;
     moveMultiplier?: number;
     onUpdateMultiplier?: (m: number) => void;
     dbEntities?: any[];
@@ -108,7 +107,7 @@ function getHexPointsStr(x: number, y: number, size: number) {
 export const WorldMap: React.FC<WorldMapProps> = ({
     userData, mapData, corridorL, corridorW, stepsRemaining, isRolling,
     onRollDice, onMoveCharacter, onBack, initialQ, initialR,
-    roleTrait, todayCompletedQuestIds, onShowMessage, onTriggerDivination,
+    roleTrait, todayCompletedQuestIds, onShowMessage,
     dbEntities = [], worldState, onEntityTrigger, moveMultiplier = 1, onUpdateMultiplier, onUpdateUserData, onUpdateSteps
 }) => {
     // Navigation & Scale
@@ -283,11 +282,47 @@ export const WorldMap: React.FC<WorldMapProps> = ({
     const perfLayerGrid = useMemo(() => fullGrid.filter(h => h.ring === 'performance'), [fullGrid]);
     const crispLayerGrid = useMemo(() => fullGrid.filter(h => h.ring === 'crisp'), [fullGrid]);
 
-    // Generate Procedural Entities based on WorldState
+    // Pre-compute per-hex seed data (hash + level + demon roll) — only recalculates when grid or day changes
+    const hexSeedMap = useMemo(() => {
+        const map = new Map<string, { rand: number; monLevel: number; monHP: number; isDemon: boolean }>();
+        const dayStr = new Date().toISOString().split('T')[0];
+
+        crispLayerGrid.forEach(hex => {
+            if (hex.q === 0 && hex.r === 0) return;
+
+            // Primary hash → entity type selection
+            const str = `${hex.q},${hex.r},${dayStr}`;
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) hash = (Math.imul(31, hash) + str.charCodeAt(i)) | 0;
+            const rand = Math.abs(hash) % 1000 / 1000;
+
+            // Secondary hash → level
+            const strL = `${hex.q},${hex.r},${dayStr},L`;
+            let hashL = 0;
+            for (let i = 0; i < strL.length; i++) hashL = (Math.imul(31, hashL) + strL.charCodeAt(i)) | 0;
+            const monLevel = (Math.abs(hashL) % 10) + 1;
+            const monHP = 50 + monLevel * 15;
+
+            // Tertiary hash → demon roll
+            let isDemon = false;
+            const zoneId = hex.zoneId;
+            if (zoneId === 'anger' || zoneId === 'chaos') {
+                const strD = `${hex.q},${hex.r},${dayStr},D`;
+                let hashD = 0;
+                for (let i = 0; i < strD.length; i++) hashD = (Math.imul(31, hashD) + strD.charCodeAt(i)) | 0;
+                const demonRoll = (Math.abs(hashD) % 100) / 100;
+                isDemon = zoneId === 'anger' ? demonRoll < 0.3 : demonRoll < 0.2;
+            }
+
+            map.set(hex.key, { rand, monLevel, monHP, isDemon });
+        });
+        return map;
+    }, [crispLayerGrid]); // dayStr is stable within a day; crispLayerGrid changes only on map reload
+
+    // Generate Procedural Entities based on WorldState (reads from cached seed map)
     const proceduralEntities = useMemo(() => {
         const entities: any[] = [];
         if (!worldState) return entities;
-        const dayStr = new Date().toISOString().split('T')[0];
         const chanceChest = worldState === 'good' ? 0.05 : worldState === 'bad' ? 0.01 : 0.02;
         const chanceMonster = worldState === 'good' ? 0.01 : worldState === 'bad' ? 0.08 : 0.02;
 
@@ -295,15 +330,22 @@ export const WorldMap: React.FC<WorldMapProps> = ({
             if (hex.q === 0 && hex.r === 0) return;
             if (suppressedProcKeys.has(hex.key)) return;
 
-            const str = `${hex.q},${hex.r},${dayStr}`;
-            let hash = 0;
-            for (let i = 0; i < str.length; i++) hash = (Math.imul(31, hash) + str.charCodeAt(i)) | 0;
-            const rand = Math.abs(hash) % 1000 / 1000;
+            const seed = hexSeedMap.get(hex.key);
+            if (!seed) return;
+            const { rand, monLevel, monHP, isDemon } = seed;
 
             if (rand < chanceChest) {
                 entities.push({ id: `proc_treasure_${hex.key}`, q: hex.q, r: hex.r, type: 'treasure', icon: '🎁', name: '神秘寶箱', key: hex.key });
             } else if (rand < chanceChest + chanceMonster) {
-                entities.push({ id: `proc_monster_${hex.key}`, q: hex.q, r: hex.r, type: 'monster', icon: '🐉', name: '野生妖獸', key: hex.key, data: { level: Math.floor(Math.random() * 10) + 1, hp: 100 } });
+                const zoneId = hex.zoneId;
+                const monType = isDemon ? 'demon' : 'normal';
+                const monIcon = isDemon ? '👹' : '🐉';
+                const monName = isDemon ? '心魔' : '野生妖獸';
+                entities.push({
+                    id: `proc_monster_${hex.key}`, q: hex.q, r: hex.r, type: 'monster',
+                    icon: monIcon, name: monName, key: hex.key,
+                    data: { level: monLevel, hp: monHP, type: monType, zone: zoneId }
+                });
             } else {
                 // Portal chance: 1% but ONLY if distance from center > 15
                 const dist = Math.max(Math.abs(hex.q), Math.abs(hex.r), Math.abs(hex.q + hex.r));
@@ -313,7 +355,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({
             }
         });
         return entities;
-    }, [crispLayerGrid, worldState, suppressedProcKeys]);
+    }, [crispLayerGrid, worldState, suppressedProcKeys, hexSeedMap]);
     // Check Entity Collision after movement
     useEffect(() => {
         if (onEntityTrigger && !isCombatModalOpen) {
@@ -740,13 +782,6 @@ export const WorldMap: React.FC<WorldMapProps> = ({
                         <div className="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-1 shadow-black drop-shadow-md">Coordinates / 座標</div>
                         <div className="text-xl font-black text-emerald-400 flex items-center gap-2"><Footprints size={18} /> {userData.CurrentQ}, {userData.CurrentR}</div>
                     </div>
-                    <div className="h-8 w-px bg-white/10 mx-2"></div>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onTriggerDivination(); }}
-                        className="px-4 py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black rounded-2xl transition-all shadow-lg active:scale-95 border border-indigo-400/50 flex items-center gap-2 pointer-events-auto"
-                    >
-                        ✨ 觀因果
-                    </button>
                 </div>
             </main>
 

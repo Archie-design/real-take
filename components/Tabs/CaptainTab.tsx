@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { ShieldAlert, Dices } from 'lucide-react';
+import { ShieldAlert, Dices, Loader2 } from 'lucide-react';
 import { DAILY_QUEST_CONFIG } from '@/lib/constants';
-import { TeamSettings, W4Application } from '@/types';
+import { TeamSettings, W4Application, CaptainBriefing } from '@/types';
 
 interface CaptainTabProps {
     teamName: string;
@@ -9,6 +9,9 @@ interface CaptainTabProps {
     pendingW4Apps: W4Application[];
     onDrawWeeklyQuest: () => Promise<void>;
     onReviewW4: (appId: string, approve: boolean, notes: string) => Promise<void>;
+    onGetAIBriefing: () => Promise<void>;
+    aiBriefing: CaptainBriefing | null;
+    isLoadingBriefing: boolean;
 }
 
 function getCurrentWeekMondayStr(): string {
@@ -19,7 +22,7 @@ function getCurrentWeekMondayStr(): string {
     return monday.toISOString().slice(0, 10);
 }
 
-export function CaptainTab({ teamName, teamSettings, pendingW4Apps, onDrawWeeklyQuest, onReviewW4 }: CaptainTabProps) {
+export function CaptainTab({ teamName, teamSettings, pendingW4Apps, onDrawWeeklyQuest, onReviewW4, onGetAIBriefing, aiBriefing, isLoadingBriefing }: CaptainTabProps) {
     const [isDrawing, setIsDrawing] = useState(false);
     const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
     const [reviewingId, setReviewingId] = useState<string | null>(null);
@@ -51,6 +54,60 @@ export function CaptainTab({ teamName, teamSettings, pendingW4Apps, onDrawWeekly
                 <h2 className="text-2xl font-black text-white italic mx-auto">{teamName || '未知小隊'}</h2>
                 <p className="text-xs text-indigo-300 mt-2 font-black">你擁有點亮同伴前行的提燈。請謹慎決策。</p>
             </div>
+
+            {/* ── AI 隊務分析 ── */}
+            <section className="bg-slate-900 border-2 border-purple-500/30 p-8 rounded-4xl space-y-5 shadow-xl">
+                <h3 className="text-lg font-black text-white border-b border-white/10 pb-4 text-left">🤖 AI 隊務分析</h3>
+                <p className="text-xs text-slate-400 font-bold leading-relaxed text-left">
+                    即時分析本小隊近 7 天修行表現，識別表現之星與需要關懷的隊員。
+                </p>
+                <button
+                    disabled={isLoadingBriefing}
+                    onClick={onGetAIBriefing}
+                    className="w-full flex items-center justify-center gap-3 bg-purple-600 p-4 rounded-2xl text-white font-black text-base shadow-lg hover:bg-purple-500 active:scale-95 transition-all disabled:opacity-50"
+                >
+                    {isLoadingBriefing
+                        ? <><Loader2 size={20} className="animate-spin" /> 分析中，請稍候…</>
+                        : <>🤖 開始分析</>
+                    }
+                </button>
+
+                {aiBriefing && (
+                    <div className="space-y-4 pt-1 animate-in slide-in-from-bottom-4 duration-500">
+                        <div className="flex items-center gap-2">
+                            <span className={`text-xs font-black px-3 py-1 rounded-lg ${
+                                aiBriefing.teamMorale === 'high' ? 'bg-emerald-500/20 text-emerald-400' :
+                                aiBriefing.teamMorale === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
+                                'bg-red-500/20 text-red-400'
+                            }`}>
+                                {aiBriefing.teamMorale === 'high' ? '士氣高昂 ↑' :
+                                 aiBriefing.teamMorale === 'medium' ? '士氣持平 →' : '士氣低迷 ↓'}
+                            </span>
+                        </div>
+                        <p className="text-sm text-slate-300 leading-relaxed text-left">{aiBriefing.teamSummary}</p>
+                        <div className="bg-slate-800 rounded-2xl p-4 space-y-1 text-left">
+                            <p className="text-xs font-black text-emerald-400 uppercase tracking-widest">本週之星</p>
+                            <p className="text-sm text-white font-bold">{aiBriefing.topPerformer}</p>
+                        </div>
+                        {aiBriefing.needsSupport.length > 0 && (
+                            <div className="bg-slate-800 rounded-2xl p-4 space-y-2 text-left">
+                                <p className="text-xs font-black text-yellow-400 uppercase tracking-widest">需要關懷</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {aiBriefing.needsSupport.map(name => (
+                                        <span key={name} className="px-3 py-1 bg-yellow-500/10 text-yellow-300 text-xs font-bold rounded-lg">
+                                            {name}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        <div className="bg-indigo-950/40 border border-indigo-500/30 rounded-2xl p-4 text-left">
+                            <p className="text-xs font-black text-indigo-400 uppercase tracking-widest mb-1">本週建議</p>
+                            <p className="text-xs text-slate-300 leading-relaxed">{aiBriefing.suggestion}</p>
+                        </div>
+                    </div>
+                )}
+            </section>
 
             <section className="bg-slate-900 border-2 border-slate-800 p-8 rounded-4xl space-y-6 shadow-xl text-center">
                 <h3 className="text-lg font-black text-white border-b border-white/10 pb-4 text-left">🎲 本週推薦定課抽籤</h3>

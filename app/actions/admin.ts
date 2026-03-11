@@ -91,25 +91,53 @@ export async function triggerWeeklySnapshot() {
         const chanceChest = worldState === 'good' ? 0.05 : worldState === 'bad' ? 0.01 : 0.02;
         const chanceMonster = worldState === 'good' ? 0.01 : worldState === 'bad' ? 0.08 : 0.02;
 
+        // Global caps to prevent flooding
+        const MAX_MONSTERS = worldState === 'bad' ? 60 : worldState === 'normal' ? 30 : 12;
+        const MAX_CHESTS   = worldState === 'good' ? 40 : worldState === 'normal' ? 25 : 10;
+        let monsterCount = 0;
+        let chestCount = 0;
+
+        // Zone direction lookup (same order as ZONES in constants.tsx)
+        // pride=N, doubt=NE, anger=SE, greed=S, delusion=SW, chaos=NW
+        const getZoneId = (q: number, r: number): string => {
+            const s = -q - r;
+            if (r < 0 && s > 0 && Math.abs(q) <= Math.abs(r)) return 'pride';
+            if (q > 0 && r < 0) return 'doubt';
+            if (q > 0 && s < 0) return 'anger';
+            if (r > 0 && s < 0 && Math.abs(q) <= Math.abs(r)) return 'greed';
+            if (q < 0 && r > 0) return 'delusion';
+            if (q < 0 && s > 0) return 'chaos';
+            return 'center';
+        };
+
         // We simulate a grid area of radius ~15 to scatter entities
         const R = 15;
         for (let q = -R; q <= R; q++) {
             for (let r = Math.max(-R, -q - R); r <= Math.min(R, -q + R); r++) {
                 if (q === 0 && r === 0) continue; // Safe hub
+                if (monsterCount >= MAX_MONSTERS && chestCount >= MAX_CHESTS) break;
 
                 const rand = Math.random();
-                if (rand < chanceChest) {
+                if (rand < chanceChest && chestCount < MAX_CHESTS) {
                     await client.query(`
-                        INSERT INTO "MapEntities" (q, r, type, name, icon) 
+                        INSERT INTO "MapEntities" (q, r, type, name, icon)
                         VALUES ($1, $2, 'treasure', '神秘寶箱', '🎁')
                     `, [q, r]);
-                } else if (rand < chanceChest + chanceMonster) {
+                    chestCount++;
+                } else if (rand < chanceChest + chanceMonster && monsterCount < MAX_MONSTERS) {
+                    // Level scales with axial distance from center (Lv1 near hub, Lv10 at edges)
+                    const dist = (Math.abs(q) + Math.abs(r) + Math.abs(-q - r)) / 2;
+                    const level = Math.min(10, Math.max(1, Math.floor(dist / 2)));
+                    const hp = 50 + level * 15;
+                    const zoneId = getZoneId(q, r);
                     await client.query(`
-                        INSERT INTO "MapEntities" (q, r, type, name, icon) 
-                        VALUES ($1, $2, 'monster', '野生妖獸', '🐉')
-                    `, [q, r]);
+                        INSERT INTO "MapEntities" (q, r, type, name, icon, data)
+                        VALUES ($1, $2, 'monster', '野生妖獸', '🐉', $3)
+                    `, [q, r, JSON.stringify({ level, hp, zone: zoneId })]);
+                    monsterCount++;
                 }
             }
+            if (monsterCount >= MAX_MONSTERS && chestCount >= MAX_CHESTS) break;
         }
 
         await client.query('COMMIT');

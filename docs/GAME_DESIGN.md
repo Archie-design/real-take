@@ -1,6 +1,6 @@
 # 星光西遊：遊戲系統設計文檔
 
-> **版本**：v0.3 | **更新日期**：2026-03-06  
+> **版本**：v0.5 | **更新日期**：2026-03-11
 > 本文為主要設計規範，開發以此為最終依據。
 
 ---
@@ -216,29 +216,69 @@
 
 ---
 
-### 3.6 AI 動態難度 (DDA) — `gemini.ts`
-- AI 依「過去 **7 天**」定課達成率動態生成個人化遭遇事件。
-- 使用模型：`gemini-2.5-flash`，強制回傳 `application/json`。
+### 3.6 AI 功能總覽 — `gemini.ts`
+
+所有 AI 功能使用 **Gemini 2.5 Flash**（`gemini-2.5-flash`），強制回傳 `responseMimeType: "application/json"`。
+
+#### 3.6.1 AI 動態難度 (DDA) — `generatePersonalizedEncounter`
+
+- 依玩家觸碰特定地圖實體或地格時觸發。
+- AI 分析「過去 **7 天**」定課達成率，個人化生成遭遇事件，並寫入 `MapEntities`（放置於玩家鄰近隨機格，`owner_id = userId`）。
 - **事件分支**：
   - **精進者**（高頻打卡）：生成「正向奇遇」或「精英挑戰」，對話充滿激勵/挑釁。
   - **懈怠者**（低頻或中斷）：生成「心魔」或「障礙」，對話帶有當頭棒喝感。
 - **弱點設計**：怪物攻擊專攻玩家六維屬性中的**最低項**。
-- **完整回傳 JSON 格式**：
+- **回傳 JSON 格式**：
 ```json
 {
   "encounterName": "遭遇名稱",
-  "encounterType": "monster" | "npc" | "treasure",
+  "encounterType": "monster | npc | treasure",
   "level": 15,
   "hp": 500,
   "narrative": "50 字描述",
   "dialogue": "NPC 或心魔台詞",
-  "targetStat": "神識" | "根骨" | "魅力" | "悟性" | "機緣" | "潛力",
+  "targetStat": "神識 | 根骨 | 魅力 | 悟性 | 機緣 | 潛力",
   "effect": {
-    "statToModify": "EnergyDice" | "Physique" | "Spirit" | "Charisma" | "Savvy" | "Luck" | "Potential",
+    "statToModify": "EnergyDice | Physique | Spirit | Charisma | Savvy | Luck | Potential",
     "value": 10
   }
 }
 ```
+
+#### 3.6.2 AI 修行週報 — `generateWeeklyReview`
+
+- **觸發時機**：玩家點擊「加分副本」Tab，系統自動判斷：若本週尚無週報則呼叫 Gemini 生成，已有則直接讀取（同週不重複呼叫）。
+- **資料依據**：玩家本週 + 上週 `q` 開頭定課完成次數（上限 21 次/週），以及六維屬性最低項。
+- **顯示位置**：「加分副本（Weekly）」Tab 最頂端，卡片形式顯示。
+- **生成內容**：
+  - `summary`（80–100 字）：個人化修行覆盤，語氣依完成率調整（高→鼓舞；中→提醒；低→當頭棒喝）。
+  - `quote`（15–30 字）：西遊/道家主題金句，與本週狀態呼應。
+  - `trend`：`"up" | "down" | "stable"`（完成率週差 > 5% 為 up/down）。
+  - `weeklyRate`：本週完成率（0–1 小數）。
+- **持久化**：結果寫入 `WeeklyReviews` 資料表，`UNIQUE(user_id, week_label)` 確保冪等（重跑安全）。
+- **DB Schema**（`WeeklyReviews`）：
+
+| 欄位 | 型別 | 說明 |
+|------|------|------|
+| `id` | uuid | PK |
+| `user_id` | text | 玩家 UserID |
+| `week_label` | date | 當週週一日期（`YYYY-MM-DD`） |
+| `content` | jsonb | `{ summary, quote, trend, weeklyRate }` |
+| `created_at` | timestamptz | 生成時間 |
+
+#### 3.6.3 AI 隊長建議 — `generateCaptainBriefing`
+
+- **權限**：僅 `IsCaptain = true` 的玩家可使用。
+- **觸發時機**：隊長在「隊長指揮所」Tab 手動點擊「🤖 開始分析」按鈕（即時生成，不快取）。
+- **資料依據**：整支小隊（`TeamName`）所有成員的近 7 天 `q` 開頭定課完成次數，批量查詢（`ANY($1::text[])`）避免 N+1。
+- **顯示位置**：「隊長指揮所」Tab 頂部，分析區塊 inline 展開（不開 modal）。
+- **生成內容**：
+  - `teamSummary`（80–100 字）：整體隊伍士氣評述，第二人稱「你的小隊」向隊長說話。
+  - `topPerformer`：本週完成率最高的隊員姓名 + 一句鼓勵（格式：「姓名：鼓勵語」）。
+  - `needsSupport`：完成率 < 33% 的隊員姓名陣列，無則為 `[]`。
+  - `suggestion`（約 50 字）：針對小隊現況的本週具體行動建議。
+  - `teamMorale`：`"high"（>70%）| "medium"（40–70%）| "low"（<40%）`。
+- **無持久化**：結果為即時回傳，不寫入資料庫，每次點擊均重新生成。
 
 ---
 
@@ -607,6 +647,7 @@ DB Call:  直接 SQL 查詢（pool/client via node-postgres）
 | `DailyLogs` | Timestamp, UserID, QuestID, QuestTitle, RewardPoints | 每日任務紀錄 |
 | `TeamSettings` | team_name, team_coins, inventory | 部隊設定和金庫 |
 | `MapEntities` | id, data (含 hp/zone/traits) | 地圖上的怪物/實體 |
+| `WeeklyReviews` | user_id, week_label (date), content (jsonb) | AI 修行週報（每玩家每週一筆） |
 
 ### 主要 Server Actions
 | 檔案 | 主要函式 | 功能 |
@@ -618,7 +659,9 @@ DB Call:  直接 SQL 查詢（pool/client via node-postgres）
 | `dice.ts` | `transferGoldenDiceToTeam`, `blessChestWithGoldenDice` | 黃金骰子捐贈、開箱加持 |
 | `team.ts` | `donateDice`, `donateGoldenDice` | 玩家間骰子互贈 |
 | `items.ts` | `buyGameItem`, `useGameItem` | NPC 道具商店（使用 GameGold） |
-| `gemini.ts` | `generatePersonalizedEncounter` | AI 動態遭遇生成（DDA） |
+| `gemini.ts` | `generatePersonalizedEncounter` | AI 動態遭遇生成（DDA），寫入 MapEntities |
+| `gemini.ts` | `generateWeeklyReview` | AI 修行週報，on-demand 生成並寫入 WeeklyReviews |
+| `gemini.ts` | `generateCaptainBriefing` | AI 隊長建議，即時生成不持久化（限隊長） |
 
 ---
 

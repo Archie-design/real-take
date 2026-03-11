@@ -144,6 +144,21 @@ export interface HexPos {
   y: number;
 }
 
+export interface WeeklyReview {
+  summary: string;
+  quote: string;
+  trend: 'up' | 'down' | 'stable';
+  weeklyRate: number;
+}
+
+export interface CaptainBriefing {
+  teamSummary: string;
+  topPerformer: string;
+  needsSupport: string[];
+  suggestion: string;
+  teamMorale: 'high' | 'medium' | 'low';
+}
+
 export interface HexData extends HexPos {
   type: 'center' | 'corridor' | 'subzone';
   terrainId?: string;
