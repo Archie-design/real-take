@@ -739,36 +739,42 @@ export default function App() {
     executeRegisterFlow({ ...tieBreakData, assignedRole: role, lowestScore: tieBreakData.evalRes.lowestScore });
   };
 
-  const handleStartAdventure = () => {
+  const handleStartAdventure = async () => {
     if (!userData || userData.EnergyDice < ADVENTURE_COST) {
       setModalMessage({ text: `能量不足！啟動需要 ${ADVENTURE_COST} 顆骰子。`, type: 'error' });
       return;
+    }
+    // Re-fetch fresh entity list (monsters, chests) every time before entering the map
+    const { data: freshEntities } = await supabase.from('MapEntities').select('*').eq('is_active', true);
+    if (freshEntities) {
+      setMapEntities(prev => {
+        const teammates = prev.filter(e => typeof e.id === 'string' && e.id.startsWith('teammate_'));
+        return [...teammates, ...freshEntities];
+      });
     }
     setView('map');
   };
 
   const handleLogout = () => { sessionStorage.removeItem('starry_session_uid'); setUserData(null); setView('login'); };
 
+  // One-time static data load — world map terrain, settings, history
+  // Separated from the login useEffect so userData changes don't re-fetch and potentially clobber mapData
   useEffect(() => {
-    const init = async () => {
-      // Fetch map data
+    const loadStaticData = async () => {
       const { data: mapWorldData } = await supabase.from('world_maps').select('data').eq('id', 'main_world_map').single();
-      if (mapWorldData && mapWorldData.data) {
+      if (mapWorldData?.data) {
         const fetchedData = mapWorldData.data as { terrain?: Record<string, string>, config?: { corridorL: number, corridorW: number } };
-        setMapData(fetchedData.terrain || {});
+        if (fetchedData.terrain) setMapData(fetchedData.terrain);
         if (fetchedData.config) {
           setCorridorL(fetchedData.config.corridorL || DEFAULT_CONFIG.CORRIDOR_L);
           setCorridorW(fetchedData.config.corridorW || DEFAULT_CONFIG.CORRIDOR_W);
         }
       }
 
-      // Always try to fetch setting early to populate UI
       const { data: settingsData } = await supabase.from('SystemSettings').select('*');
       if (settingsData) {
         const sObj = settingsData.reduce((acc: any, curr: any) => ({ ...acc, [curr.SettingName]: curr.Value }), {});
-        setSystemSettings({
-          TopicQuestTitle: sObj.TopicQuestTitle || '修行主題載入中'
-        });
+        setSystemSettings({ TopicQuestTitle: sObj.TopicQuestTitle || '修行主題載入中' });
       }
 
       const { data: historyData } = await supabase.from('TopicHistory').select('*').order('created_at', { ascending: false });
@@ -779,7 +785,12 @@ export default function App() {
         const parsed = tempQuestsData.map((t: any) => ({ ...t, limit: t.limit_count }));
         setTemporaryQuests(parsed as TemporaryQuest[]);
       }
+    };
+    loadStaticData();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    const init = async () => {
       // Fetch teammates' positions for map interaction
       const fetchTeammates = async (teamName: string, selfId: string) => {
         try {
@@ -874,6 +885,15 @@ export default function App() {
     };
     if (activeTab === 'rank' || view === 'admin') fetchRank();
   }, [activeTab, view]);
+
+  // Refresh w4 applications whenever the weekly tab becomes active
+  useEffect(() => {
+    if (activeTab === 'weekly' && userData?.UserID) {
+      getW4Applications({ userId: userData.UserID }).then(res => {
+        if (res.success) setW4Applications(res.applications);
+      });
+    }
+  }, [activeTab, userData?.UserID]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const HomeView = () => (
     <div className="min-h-screen bg-slate-950 text-slate-200 pb-40 text-center animate-in fade-in">

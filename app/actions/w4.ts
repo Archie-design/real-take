@@ -19,19 +19,21 @@ export async function submitW4Application(
     description: string = ''
 ) {
     const supabase = createClient(supabaseUrl, supabaseKey);
-    const questId = `w4|${interviewDate}`;
+    // questId includes target so each person's interview is a distinct check-in record
+    const questId = `w4|${interviewDate}|${interviewTarget.trim().slice(0, 50)}`;
 
-    // 防止同一天重複提交（同 userId + interviewDate，且 status != rejected）
+    // 防止對同一對象在同一天重複提交（同一天可以傳愛多人，但同一對象不能重複）
     const { data: existing } = await supabase
         .from('W4Applications')
         .select('id, status')
         .eq('user_id', userId)
         .eq('interview_date', interviewDate)
+        .eq('interview_target', interviewTarget.trim())
         .neq('status', 'rejected')
         .maybeSingle();
 
     if (existing) {
-        return { success: false, error: '同一天已有一筆申請（待審或已核准），無法重複提交' };
+        return { success: false, error: `已有「${interviewTarget.trim()}」的同日申請（待審或已核准），無法重複提交` };
     }
 
     const { data, error } = await supabase
