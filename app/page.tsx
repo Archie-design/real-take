@@ -448,7 +448,22 @@ export default function App() {
       return;
     }
     setIsRolling(true);
-    setTimeout(() => {
+    const newDiceCount = userData.EnergyDice - amount;
+
+    // Fire DB write IMMEDIATELY (not inside setTimeout) so a page refresh can't cancel it
+    const dbWrite = supabase
+      .from('CharacterStats')
+      .update({ EnergyDice: newDiceCount })
+      .eq('UserID', userData.UserID);
+
+    setTimeout(async () => {
+      const { error } = await dbWrite;
+      if (error) {
+        setIsRolling(false);
+        setModalMessage({ text: '骰子扣除失敗，請重試。', type: 'error' });
+        return;
+      }
+
       let roll = 0;
       for (let i = 0; i < amount; i++) {
         roll += Math.floor(Math.random() * 6) + 1;
@@ -462,9 +477,8 @@ export default function App() {
       setStepsRemaining(roll);
       setMoveMultiplier(1); // Reset after single use
       setIsRolling(false);
-      const newDiceCount = userData.EnergyDice - amount;
-      setUserData({ ...userData, EnergyDice: newDiceCount });
-      supabase.from('CharacterStats').update({ EnergyDice: newDiceCount }).eq('UserID', userData.UserID);
+      // Use functional update to avoid overwriting concurrent state changes (e.g. combat dice rewards)
+      setUserData(prev => prev ? { ...prev, EnergyDice: newDiceCount } : null);
       setModalMessage({ text: `修行法輪轉動完成！獲得步數：${roll}`, type: 'success' });
     }, 800);
   };
@@ -474,14 +488,24 @@ export default function App() {
 
     setShowGoldenDicePicker(false);
     setIsRolling(true);
+    const newGoldenCount = (userData.GoldenDice || 0) - 1;
+
+    // Fire DB write immediately before the animation delay
+    const dbWrite = supabase
+      .from('CharacterStats')
+      .update({ GoldenDice: newGoldenCount })
+      .eq('UserID', userData.UserID);
 
     setTimeout(async () => {
-      const newGoldenCount = (userData.GoldenDice || 0) - 1;
+      const { error } = await dbWrite;
+      if (error) {
+        setIsRolling(false);
+        setModalMessage({ text: '萬能奇蹟骰扣除失敗，請重試。', type: 'error' });
+        return;
+      }
       setStepsRemaining(steps);
-      setUserData({ ...userData, GoldenDice: newGoldenCount });
+      setUserData(prev => prev ? { ...prev, GoldenDice: newGoldenCount } : null);
       setIsRolling(false);
-
-      await supabase.from('CharacterStats').update({ GoldenDice: newGoldenCount }).eq('UserID', userData.UserID);
       setModalMessage({ text: `萬能奇蹟骰已發動！精準鎖定 ${steps} 步！`, type: 'success' });
     }, 800);
   };
@@ -526,7 +550,7 @@ export default function App() {
         .eq('UserID', userData.UserID);
       if (error) throw error;
 
-      setUserData({ ...userData, CurrentQ: finalQ, CurrentR: finalR, TotalFines: newFines, Facing: finalFacing });
+      setUserData(prev => prev ? { ...prev, CurrentQ: finalQ, CurrentR: finalR, TotalFines: newFines, Facing: finalFacing } : null);
       setStepsRemaining(remaining);
 
       if (penaltyText) {

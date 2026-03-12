@@ -665,17 +665,50 @@ export const WorldMap: React.FC<WorldMapProps> = ({
                 </div>
 
                 {/* HUD Info */}
-                <div className="absolute bottom-6 left-6 bg-slate-900/80 p-5 rounded-3xl border border-white/10 backdrop-blur-xl shadow-2xl select-none pointer-events-none z-30 flex items-center gap-6">
-                    <div>
-                        <div className="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-1 shadow-black drop-shadow-md">Energy / 能量</div>
-                        <div className="text-xl font-black text-amber-400 flex items-center gap-2"><Dice5 size={18} /> {userData.EnergyDice}</div>
-                    </div>
-                    <div className="h-8 w-px bg-white/10"></div>
-                    <div>
-                        <div className="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-1 shadow-black drop-shadow-md">Coordinates / 座標</div>
-                        <div className="text-xl font-black text-emerald-400 flex items-center gap-2"><Footprints size={18} /> {userData.CurrentQ}, {userData.CurrentR}</div>
-                    </div>
-                </div>
+                {(() => {
+                    const roleConfig = ROLE_CURE_MAP[userData.Role] || ROLE_CURE_MAP['孫悟空'];
+                    const maxHP = roleConfig.baseHP + (userData.Physique * roleConfig.hpScale);
+                    const currentHP = userData.HP ?? maxHP;
+                    const atk = (userData.Level * 10) + (userData.Physique * 2);
+                    const def = roleConfig.baseDEF + userData.Physique;
+                    const hpPct = Math.max(0, Math.min(1, currentHP / maxHP));
+                    const hpColor = hpPct > 0.6 ? 'text-emerald-400' : hpPct > 0.3 ? 'text-yellow-400' : 'text-red-400';
+                    return (
+                        <div className="absolute bottom-6 left-6 bg-slate-900/80 p-4 rounded-3xl border border-white/10 backdrop-blur-xl shadow-2xl select-none pointer-events-none z-30 space-y-3 min-w-[160px]">
+                            {/* HP bar */}
+                            <div>
+                                <div className="flex justify-between items-center mb-1">
+                                    <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest">❤️ 血量</span>
+                                    <span className={`text-xs font-black ${hpColor}`}>{currentHP} / {maxHP}</span>
+                                </div>
+                                <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                    <div className={`h-full rounded-full transition-all ${hpPct > 0.6 ? 'bg-emerald-500' : hpPct > 0.3 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${hpPct * 100}%` }} />
+                                </div>
+                            </div>
+                            {/* ATK / DEF */}
+                            <div className="flex items-center gap-4">
+                                <div>
+                                    <div className="text-[9px] font-black uppercase text-slate-500 tracking-widest mb-0.5">⚔️ 攻擊</div>
+                                    <div className="text-sm font-black text-orange-400">{atk}</div>
+                                </div>
+                                <div className="h-6 w-px bg-white/10" />
+                                <div>
+                                    <div className="text-[9px] font-black uppercase text-slate-500 tracking-widest mb-0.5">🛡️ 防禦</div>
+                                    <div className="text-sm font-black text-sky-400">{def}</div>
+                                </div>
+                                <div className="h-6 w-px bg-white/10" />
+                                <div>
+                                    <div className="text-[9px] font-black uppercase text-slate-500 tracking-widest mb-0.5"><Dice5 size={9} className="inline" /> 骰子</div>
+                                    <div className="text-sm font-black text-amber-400">{userData.EnergyDice}</div>
+                                </div>
+                            </div>
+                            {/* Coordinates */}
+                            <div className="flex items-center gap-1.5 text-[9px] text-slate-600 font-mono">
+                                <Footprints size={10} /> {userData.CurrentQ}, {userData.CurrentR}
+                            </div>
+                        </div>
+                    );
+                })()}
             </main>
 
             {/* Hover Tooltip for Entities */}
