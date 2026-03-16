@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Skull, Wand2, Sparkles, Shield, Heart, Brain, Zap, Trophy, Coins, Cake } from 'lucide-react';
 import { CharacterStats } from '@/types';
 
@@ -30,29 +30,10 @@ export const StatCard = ({ label, value, icon, color }: StatCardProps) => (
 interface StatsTabProps {
     userData: CharacterStats;
     roleTrait: { isCursed: boolean; curseName: string; curseEffect: string; talent: string } | null;
-    onSaveBirthday: (birthday: string) => Promise<{ success: boolean; error?: string }>;
 }
 
-export function StatsTab({ userData, roleTrait, onSaveBirthday }: StatsTabProps) {
-    const [editingBirthday, setEditingBirthday] = useState(false);
-    const [birthdayInput, setBirthdayInput] = useState(userData.Birthday || '');
-    const [saving, setSaving] = useState(false);
-    const [birthdayMsg, setBirthdayMsg] = useState('');
-
+export function StatsTab({ userData, roleTrait }: StatsTabProps) {
     if (!roleTrait) return null;
-
-    const handleSaveBirthday = async () => {
-        setSaving(true);
-        setBirthdayMsg('');
-        const res = await onSaveBirthday(birthdayInput);
-        setSaving(false);
-        if (res.success) {
-            setEditingBirthday(false);
-            setBirthdayMsg('');
-        } else {
-            setBirthdayMsg(res.error || '儲存失敗');
-        }
-    };
 
     const displayAge = userData.Birthday
         ? Math.floor((Date.now() - new Date(userData.Birthday).getTime()) / (365.25 * 24 * 3600 * 1000))
@@ -86,45 +67,17 @@ export function StatsTab({ userData, roleTrait, onSaveBirthday }: StatsTabProps)
                 </div>
             </div>
 
-            {/* Birthday card */}
+            {/* Birthday card — read-only, set by admin via roster import */}
             <div className="bg-slate-900 border-2 border-slate-800 p-5 rounded-4xl shadow-xl text-left">
                 <div className="flex items-center gap-2 mb-3">
                     <Cake size={16} className="text-pink-400" />
                     <span className="text-[10px] font-black text-slate-500 tracking-widest uppercase ml-1">生日（金剛杖資格驗證）</span>
                 </div>
-                {!editingBirthday ? (
-                    <div className="flex items-center justify-between">
-                        <span className="text-white font-bold">
-                            {userData.Birthday
-                                ? `${userData.Birthday}（${displayAge} 歲）`
-                                : <span className="text-slate-500">尚未設定</span>}
-                        </span>
-                        <button onClick={() => { setEditingBirthday(true); setBirthdayInput(userData.Birthday || ''); }}
-                            className="text-xs text-orange-400 font-bold border border-orange-400/30 px-3 py-1 rounded-xl hover:bg-orange-400/10 transition-all">
-                            {userData.Birthday ? '修改' : '設定'}
-                        </button>
-                    </div>
-                ) : (
-                    <div className="space-y-2">
-                        <input
-                            type="date"
-                            value={birthdayInput}
-                            onChange={e => setBirthdayInput(e.target.value)}
-                            className="w-full bg-slate-800 border border-slate-600 text-white rounded-xl px-3 py-2 text-sm"
-                        />
-                        {birthdayMsg && <p className="text-xs text-red-400">{birthdayMsg}</p>}
-                        <div className="flex gap-2">
-                            <button onClick={handleSaveBirthday} disabled={saving || !birthdayInput}
-                                className="flex-1 bg-orange-500 text-white font-bold text-sm py-2 rounded-xl disabled:opacity-40 transition-all">
-                                {saving ? '儲存中…' : '儲存'}
-                            </button>
-                            <button onClick={() => setEditingBirthday(false)}
-                                className="px-4 text-sm text-slate-400 border border-slate-700 rounded-xl hover:bg-slate-800 transition-all">
-                                取消
-                            </button>
-                        </div>
-                    </div>
-                )}
+                <span className="text-white font-bold">
+                    {userData.Birthday
+                        ? `${userData.Birthday}（${displayAge} 歲）`
+                        : <span className="text-slate-500">尚未設定</span>}
+                </span>
             </div>
 
             <div className="grid grid-cols-1 gap-5 text-center mx-auto">
