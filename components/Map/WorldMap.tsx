@@ -593,76 +593,72 @@ export const WorldMap: React.FC<WorldMapProps> = ({
                             })}
                         </g>
 
-                        {/* 3. Player Character & HUD */}
+                        {/* 3. Player Character — avatar & name only; HUD is HTML overlay below */}
                         <g transform={`translate(${playerPixel.x}, ${playerPixel.y})`}>
-                            {/* Use HTML Flexbox via foreignObject for perfect Emoji centering, bypassing SVG offset bugs */}
-                            <foreignObject x={-25} y={-30} width={50} height={50} className="overflow-visible pointer-events-none">
-                                <div className="w-full h-full flex items-center justify-center text-[28px] drop-shadow-xl select-none">
-                                    {ROLE_CURE_MAP[userData.Role]?.avatar || '👤'}
-                                </div>
-                            </foreignObject>
-                            <text y={24} textAnchor="middle" fontSize={10} fontWeight="900" fill="white" className="uppercase tracking-widest drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" style={{ textShadow: '0 2px 4px black, 0 -1px 2px black' }}>{userData.Name}</text>
-
-                            {/* HUD / Dice Roller */}
-                            <foreignObject x={-100} y={35} width={200} height={160} className="overflow-visible pointer-events-none">
-                                <div className={`p-3 rounded-[2rem] bg-slate-900/80 border ${moveMultiplier && moveMultiplier > 1 ? 'border-yellow-400 shadow-[0_0_30px_rgba(250,204,21,0.5)] animate-pulse' : 'border-white/10 shadow-2xl'} backdrop-blur-xl flex flex-col gap-3 items-center pointer-events-auto transform scale-90 origin-top hover:scale-100 transition-transform`}>
-                                    {moveMultiplier && moveMultiplier > 1 && (
-                                        <div className="absolute -top-3 bg-yellow-400 text-black px-3 py-0.5 rounded-full text-xs font-black tracking-widest flex items-center gap-1 shadow-lg shadow-yellow-500/50">
-                                            ⚡ 衝刺 x{moveMultiplier}
-                                        </div>
-                                    )}
-                                    {/* AP Remaining display */}
-                                    <div className="w-full flex flex-col items-center gap-1">
-                                        <div className="flex items-center justify-between w-full px-1">
-                                            <span className="text-[9px] uppercase tracking-widest text-slate-500 font-bold">移動 AP</span>
-                                            <span className={`text-[11px] font-black tabular-nums ${stepsRemaining > 0 ? 'text-cyan-400' : 'text-slate-600'}`}>
-                                                {stepsRemaining}
-                                            </span>
-                                        </div>
-                                        <div className="flex gap-0.5 w-full">
-                                            {Array.from({ length: Math.min(10, Math.max(stepsRemaining, 1)) }).map((_, i) => (
-                                                <div
-                                                    key={i}
-                                                    className={`h-1.5 flex-1 rounded-full transition-all duration-200 ${
-                                                        i < stepsRemaining
-                                                            ? 'bg-cyan-400 shadow-[0_0_4px_rgba(34,211,238,0.7)]'
-                                                            : 'bg-slate-800'
-                                                    }`}
-                                                />
-                                            ))}
-                                            {stepsRemaining > 10 && (
-                                                <div className="h-1.5 flex-1 rounded-full bg-cyan-300 opacity-60" />
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-3 mt-1">
-                                        <button onClick={() => setRollAmount(p => Math.max(1, p - 1))} className="w-8 h-8 rounded-full bg-slate-950 border border-white/5 text-slate-400 flex items-center justify-center font-black active:scale-90 hover:bg-slate-800 hover:text-white transition-all"><Minus size={14} /></button>
-                                        <div className="font-black text-emerald-400 tracking-widest text-lg">x {rollAmount}</div>
-                                        <button onClick={() => setRollAmount(p => Math.min(userData.EnergyDice, p + 1))} className="w-8 h-8 rounded-full bg-slate-950 border border-white/5 text-slate-400 flex items-center justify-center font-black active:scale-90 hover:bg-slate-800 hover:text-white transition-all"><Plus size={14} /></button>
-                                    </div>
-                                    <button
-                                        onClick={() => onRollDice(rollAmount)}
-                                        disabled={isRolling || stepsRemaining > 0 || userData.EnergyDice < rollAmount}
-                                        className={`w-full py-2.5 rounded-2xl text-[10px] uppercase font-black flex items-center justify-center gap-2 transition-all ${(isRolling || stepsRemaining > 0 || userData.EnergyDice < rollAmount) ? 'bg-slate-950 border border-white/5 text-slate-600' : 'bg-gradient-to-tr from-emerald-600 to-teal-400 text-white shadow-lg shadow-emerald-500/20 active:scale-95'}`}
-                                    >
-                                        {isRolling ? <Loader2 size={12} className="animate-spin" /> : <Dice5 size={12} />} 注入能量轉輪
-                                    </button>
-
-                                    {/* Golden Dice Sub UI Button */}
-                                    {(userData.GoldenDice || 0) > 0 && (
-                                        <button
-                                            onClick={() => onRollDice(-1)} // Specialized negative integer logic
-                                            disabled={isRolling || stepsRemaining > 0}
-                                            className={`w-full py-1.5 rounded-xl text-[9px] uppercase font-black flex items-center justify-center gap-1 transition-all ${(isRolling || stepsRemaining > 0) ? 'bg-slate-950 border border-yellow-700/50 text-slate-600' : 'bg-gradient-to-r from-yellow-600 to-amber-500 text-black shadow-lg shadow-yellow-500/30 active:scale-95'}`}
-                                        >
-                                            🌟 使用萬能奇蹟骰 ({userData.GoldenDice})
-                                        </button>
-                                    )}
-                                </div>
-                            </foreignObject>
+                            {/* SVG text emoji: stable on all mobile browsers, no foreignObject needed */}
+                            <text y={-8} textAnchor="middle" fontSize={28} dominantBaseline="auto" style={{ userSelect: 'none' }}>
+                                {ROLE_CURE_MAP[userData.Role]?.avatar || '👤'}
+                            </text>
+                            <text y={22} textAnchor="middle" fontSize={10} fontWeight="900" fill="white" style={{ textShadow: '0 2px 4px black, 0 -1px 2px black' }}>{userData.Name}</text>
                         </g>
                     </svg>
                 </div>
+
+                {/* Player Dice HUD — HTML overlay, avoids SVG foreignObject iOS Safari bug */}
+                {(() => {
+                    const cw = mapContainerRef.current?.clientWidth ?? 400;
+                    const ch = mapContainerRef.current?.clientHeight ?? 600;
+                    const hudX = cw / 2 + (playerPixel.x + camX) * zoom;
+                    const hudY = ch / 2 + (playerPixel.y + camY) * zoom;
+                    return (
+                        <div
+                            className="absolute pointer-events-none z-20 flex flex-col items-center"
+                            style={{ left: hudX, top: hudY, transform: 'translateX(-50%)' }}
+                        >
+                            <div className={`mt-6 p-3 rounded-[2rem] bg-slate-900/80 border ${moveMultiplier && moveMultiplier > 1 ? 'border-yellow-400 shadow-[0_0_30px_rgba(250,204,21,0.5)] animate-pulse' : 'border-white/10 shadow-2xl'} backdrop-blur-xl flex flex-col gap-3 items-center pointer-events-auto relative`} style={{ width: 200 }}>
+                                {moveMultiplier && moveMultiplier > 1 && (
+                                    <div className="absolute -top-3 bg-yellow-400 text-black px-3 py-0.5 rounded-full text-xs font-black tracking-widest flex items-center gap-1 shadow-lg shadow-yellow-500/50">
+                                        ⚡ 衝刺 x{moveMultiplier}
+                                    </div>
+                                )}
+                                {/* AP display */}
+                                <div className="w-full flex flex-col items-center gap-1">
+                                    <div className="flex items-center justify-between w-full px-1">
+                                        <span className="text-[9px] uppercase tracking-widest text-slate-500 font-bold">移動 AP</span>
+                                        <span className={`text-[11px] font-black tabular-nums ${stepsRemaining > 0 ? 'text-cyan-400' : 'text-slate-600'}`}>{stepsRemaining}</span>
+                                    </div>
+                                    <div className="flex gap-0.5 w-full">
+                                        {Array.from({ length: Math.min(10, Math.max(stepsRemaining, 1)) }).map((_, i) => (
+                                            <div key={i} className={`h-1.5 flex-1 rounded-full transition-all duration-200 ${i < stepsRemaining ? 'bg-cyan-400 shadow-[0_0_4px_rgba(34,211,238,0.7)]' : 'bg-slate-800'}`} />
+                                        ))}
+                                        {stepsRemaining > 10 && <div className="h-1.5 flex-1 rounded-full bg-cyan-300 opacity-60" />}
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3 mt-1">
+                                    <button onClick={() => setRollAmount(p => Math.max(1, p - 1))} className="w-8 h-8 rounded-full bg-slate-950 border border-white/5 text-slate-400 flex items-center justify-center font-black active:scale-90 hover:bg-slate-800 hover:text-white transition-all"><Minus size={14} /></button>
+                                    <div className="font-black text-emerald-400 tracking-widest text-lg">x {rollAmount}</div>
+                                    <button onClick={() => setRollAmount(p => Math.min(userData.EnergyDice, p + 1))} className="w-8 h-8 rounded-full bg-slate-950 border border-white/5 text-slate-400 flex items-center justify-center font-black active:scale-90 hover:bg-slate-800 hover:text-white transition-all"><Plus size={14} /></button>
+                                </div>
+                                <button
+                                    onClick={() => onRollDice(rollAmount)}
+                                    disabled={isRolling || stepsRemaining > 0 || userData.EnergyDice < rollAmount}
+                                    className={`w-full py-2.5 rounded-2xl text-[10px] uppercase font-black flex items-center justify-center gap-2 transition-all ${(isRolling || stepsRemaining > 0 || userData.EnergyDice < rollAmount) ? 'bg-slate-950 border border-white/5 text-slate-600' : 'bg-gradient-to-tr from-emerald-600 to-teal-400 text-white shadow-lg shadow-emerald-500/20 active:scale-95'}`}
+                                >
+                                    {isRolling ? <Loader2 size={12} className="animate-spin" /> : <Dice5 size={12} />} 注入能量轉輪
+                                </button>
+                                {(userData.GoldenDice || 0) > 0 && (
+                                    <button
+                                        onClick={() => onRollDice(-1)}
+                                        disabled={isRolling || stepsRemaining > 0}
+                                        className={`w-full py-1.5 rounded-xl text-[9px] uppercase font-black flex items-center justify-center gap-1 transition-all ${(isRolling || stepsRemaining > 0) ? 'bg-slate-950 border border-yellow-700/50 text-slate-600' : 'bg-gradient-to-r from-yellow-600 to-amber-500 text-black shadow-lg shadow-yellow-500/30 active:scale-95'}`}
+                                    >
+                                        🌟 使用萬能奇蹟骰 ({userData.GoldenDice})
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })()}
 
                 {/* HUD Info */}
                 {(() => {
