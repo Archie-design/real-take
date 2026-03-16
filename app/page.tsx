@@ -1,18 +1,17 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 import {
-  AlertTriangle, CheckCircle2, Sparkles, MapIcon, ChevronLeft,
-  Dice5, Footprints, Loader2, RotateCcw, UserPlus, ArrowRight, Plus, Minus
+  AlertTriangle, CheckCircle2, Sparkles,
+  Dice5, Loader2, RotateCcw
 } from 'lucide-react';
 
-import { CharacterStats, DailyLog, Quest, SystemSettings, HexData, TopicHistory, TemporaryQuest, W4Application, AdminLog } from '@/types';
+import { CharacterStats, DailyLog, Quest, SystemSettings, TopicHistory, TemporaryQuest, W4Application, AdminLog } from '@/types';
 import { getLogicalDateStr, getWeeklyMonday } from '@/lib/utils/time';
 import { standardizePhone } from '@/lib/utils/phone';
 import { ROLE_CURE_MAP, DEFAULT_CONFIG, ADVENTURE_COST, ADMIN_PASSWORD, calculateLevelFromExp, ROLE_GROWTH_RATES } from '@/lib/constants';
-import { axialToPixel, getHexPointsStr, getHexRegion, getHexDist, axialToPixelPos } from '@/lib/utils/hex';
 import { WorldMap } from '@/components/Map/WorldMap';
 
 import { Header } from '@/components/Layout/Header';
@@ -74,7 +73,6 @@ export default function App() {
   const [stepsRemaining, setStepsRemaining] = useState(0);
   const [moveMultiplier, setMoveMultiplier] = useState(1);
   const [isRolling, setIsRolling] = useState(false);
-  const [personalEncounter, setPersonalEncounter] = useState<any>(null);
   const [w4Applications, setW4Applications] = useState<W4Application[]>([]);
   const [pendingW4Apps, setPendingW4Apps] = useState<W4Application[]>([]);
 
@@ -85,9 +83,6 @@ export default function App() {
   const [isLoadingBriefing, setIsLoadingBriefing] = useState(false);
   const [squadApprovedW4Apps, setSquadApprovedW4Apps] = useState<W4Application[]>([]);
   const [adminLogs, setAdminLogs] = useState<AdminLog[]>([]);
-
-  const isDragging = useRef(false);
-  const dragStart = useRef({ x: 0, y: 0 });
 
   const formatCheckInTime = (timestamp: string) => {
     const d = new Date(timestamp);
@@ -109,14 +104,11 @@ export default function App() {
     if (!info) return null;
     const isCuredToday = logs.some(l => l.QuestID === info.cureTaskId && getLogicalDateStr(l.Timestamp) === logicalTodayStr);
     return { ...info, isCursed: !isCuredToday };
-    return { ...info, isCursed: !isCuredToday };
   }, [userData, logs, logicalTodayStr]);
 
   const todayCompletedQuestIds = useMemo(() => {
     return logs.filter(l => getLogicalDateStr(l.Timestamp) === logicalTodayStr).map(l => l.QuestID);
   }, [logs, logicalTodayStr]);
-
-  const axialToPixelPos = useCallback((q: number, r: number, size: number) => axialToPixel(q, r, size), []);
 
   const handleAdminAuth = async (e: { preventDefault: () => void; currentTarget: HTMLFormElement }) => {
     e.preventDefault();
@@ -563,14 +555,6 @@ export default function App() {
     }
   };
 
-  const handleHexClick = useCallback((q: number, r: number) => {
-    if (view === 'map' && stepsRemaining > 0 && userData) {
-      const dist = getHexDist(userData.CurrentQ, userData.CurrentR, q, r);
-      if (dist === 0) return;
-      if (dist <= stepsRemaining) handleMoveCharacter(q, r, dist);
-      else setModalMessage({ text: `能量不足！此步需要 ${dist} 點，目前僅餘 ${stepsRemaining}。`, type: 'error' });
-    }
-  }, [view, stepsRemaining, userData, handleMoveCharacter]);
 
   const handleCheckInAction = async (quest: Quest) => {
     if (!userData) return;
@@ -863,16 +847,12 @@ export default function App() {
             setTeamMemberCount(count || 1);
             await fetchTeammates(stats.TeamName, stats.UserID);
 
-            // Auto-draw fallback: if it's Monday after noon (Taiwan UTC+8) and team hasn't drawn yet
+            // Auto-draw fallback: trigger for ALL squads every Monday after noon.
+            // Do NOT gate on teamAlreadyDrew — if this squad drew manually but others didn't,
+            // the fallback would skip those squads. autoDrawAllSquads() already skips squads that drew.
             const nowTaiwan = new Date(Date.now() + 8 * 3600 * 1000);
             const isMondayAfterNoon = nowTaiwan.getUTCDay() === 1 && nowTaiwan.getUTCHours() >= 12;
-            const weekMondayStr = (() => {
-              const d = new Date(nowTaiwan);
-              d.setUTCDate(d.getUTCDate() - (d.getUTCDay() - 1));
-              return d.toISOString().slice(0, 10);
-            })();
-            const teamAlreadyDrew = tSettings?.mandatory_quest_week === weekMondayStr;
-            if (isMondayAfterNoon && !teamAlreadyDrew) {
+            if (isMondayAfterNoon) {
               const drawRes = await autoDrawAllSquads();
               if (drawRes.success && (drawRes.drawnCount ?? 0) > 0) {
                 // Refresh teamSettings so UI reflects the newly drawn quest
