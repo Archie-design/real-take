@@ -2,6 +2,24 @@
 // Matching is case-insensitive substring match.
 // Silent when no keyword matched (avoid group noise).
 
+import { messagingApi } from '@line/bot-sdk';
+
+const MENU_TEMPLATE: messagingApi.TemplateMessage = {
+    type: 'template',
+    altText: '星光西遊定課選單',
+    template: {
+        type: 'buttons',
+        title: '星光西遊小助手',
+        text: '請選擇功能',
+        actions: [
+            { type: 'message', label: '參加定課', text: '定課' },
+            { type: 'message', label: '完成定課', text: '打卡' },
+            { type: 'message', label: '個人統計', text: '排行' },
+            { type: 'message', label: '今日請假', text: '請假' },
+        ],
+    },
+};
+
 const KEYWORD_MAP: Array<[string[], string]> = [
     [
         ['幫助', '說明', '功能', 'help'],
@@ -183,11 +201,17 @@ a5 金剛杖      修為 ×1.2     60歲以上長輩免費
     ],
 ];
 
-export function matchKeyword(text: string): string | null {
+export function matchKeyword(text: string): messagingApi.Message | null {
     const normalized = text.trim();
+
+    // 選單按鈕卡片（群組可用）
+    if (['選單', '功能表', 'menu'].some(kw => normalized.includes(kw))) {
+        return MENU_TEMPLATE;
+    }
+
     for (const [keywords, response] of KEYWORD_MAP) {
         if (keywords.some(kw => normalized.includes(kw))) {
-            return response;
+            return { type: 'text', text: response };
         }
     }
     return null;

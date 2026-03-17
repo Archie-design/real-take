@@ -95,7 +95,7 @@ export async function POST(req: Request) {
             if (response) {
                 await client.replyMessage({
                     replyToken,
-                    messages: [{ type: 'text', text: response }],
+                    messages: [response],
                 });
             }
             // No match → silent (avoid group noise)
