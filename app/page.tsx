@@ -567,7 +567,10 @@ export default function App() {
         const updatedLogs = (newLogs as DailyLog[]) || [];
         setUserData(res.user as CharacterStats);
         setLogs(updatedLogs);
-        setModalMessage({ text: "修為提升，法喜充滿！", type: 'success' });
+        setModalMessage(res.rewardCapped
+          ? { text: "破咒打卡完成，今日三項修為已滿，本次不計修為。", type: 'info' }
+          : { text: "修為提升，法喜充滿！", type: 'success' }
+        );
       } else {
         setModalMessage({ text: res.error || "記錄失敗，靈通中斷。", type: 'error' });
       }

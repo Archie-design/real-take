@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install @line/bot-sdk)",
+      "Bash(npm run build)"
+    ]
+  }
+}

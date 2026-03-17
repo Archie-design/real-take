@@ -30,7 +30,9 @@ export async function processCheckInTransaction(
         const userData = statsRes.rows[0];
         const logicalTodayStr = getLogicalDateStr();
 
-        // 2. Fetch daily logs to verify daily cap (only for 'q' quests)
+        // 2. Fetch daily logs to check if rewards are capped (only for 'q' quests)
+        // First 3 q-quests give full rewards; 4th+ still record (for curse-breaking) but give 0 rewards.
+        let rewardCapped = false;
         if (questId.startsWith('q')) {
             const logsRes = await client.query(
                 `SELECT COUNT(*) as count FROM "DailyLogs"
@@ -38,9 +40,7 @@ export async function processCheckInTransaction(
                 [userId, `${logicalTodayStr}%`]
             );
             const dailyCount = parseInt(logsRes.rows[0].count, 10);
-            if (dailyCount >= 3) {
-                throw new Error("今日修為已達 3 項定課上限。");
-            }
+            rewardCapped = dailyCount >= 3;
         }
 
         // 3. Prevent duplicate check-in for the same quest today/week
@@ -69,7 +69,8 @@ export async function processCheckInTransaction(
         const isCure = roleInfo?.cureTaskId === questId;
         const finalQuestTitle = isCure ? `${questTitle} (天命對治)` : questTitle;
 
-        const baseReward = questReward;
+        // If reward is capped, this is a curse-breaking-only check-in — zero out all rewards
+        const baseReward = rewardCapped ? 0 : questReward;
         let expMultiplier = 1;
 
         const myInventory = typeof userData.Inventory === 'string' ? JSON.parse(userData.Inventory) : (userData.Inventory || []);
@@ -166,8 +167,8 @@ export async function processCheckInTransaction(
             }
         }
 
-        // Apply Daily Fix Cure Bonus (+2)
-        if (isCure && roleInfo) {
+        // Apply Daily Fix Cure Bonus (+2) — skipped when reward is capped
+        if (isCure && roleInfo && !rewardCapped) {
             const statKey = roleInfo.bonusStat;
             updateQuery += `, "${statKey}" = "${statKey}" + 2`;
         }
@@ -186,7 +187,7 @@ export async function processCheckInTransaction(
         // Commit transaction
         await client.query('COMMIT');
 
-        return { success: true, user: updatedStatsRes.rows[0] };
+        return { success: true, rewardCapped, user: updatedStatsRes.rows[0] };
     } catch (error: any) {
         await client.query('ROLLBACK');
         return { success: false, error: error.message };

@@ -50,9 +50,19 @@ interface DailyQuestsTabProps {
     formatCheckInTime: (timestamp: string) => string;
 }
 
-function Q1Card({ q, isDone, questLog, isDawn, setIsDawn, hasMirror, activeMandatoryId, onCheckIn, onUndo, formatCheckInTime }: {
+function CurseBreakBadge() {
+    return (
+        <div className="text-right">
+            <div className="font-black text-purple-400 text-sm">🔮 破咒打卡</div>
+            <div className="text-[10px] text-slate-500 mt-0.5">不計修為</div>
+        </div>
+    );
+}
+
+function Q1Card({ q, isDone, questLog, isDawn, setIsDawn, hasMirror, activeMandatoryId, isCapped, onCheckIn, onUndo, formatCheckInTime }: {
     q: Quest; isDone: boolean; questLog?: DailyLog; isDawn: boolean;
     setIsDawn: (v: boolean) => void; hasMirror: boolean; activeMandatoryId: string;
+    isCapped: boolean;
     onCheckIn: (q: Quest) => void; onUndo: (q: Quest) => void;
     formatCheckInTime: (timestamp: string) => string;
 }) {
@@ -64,18 +74,27 @@ function Q1Card({ q, isDone, questLog, isDawn, setIsDawn, hasMirror, activeManda
             onCheckIn(q);
         }
     };
+    const borderClass = isDone
+        ? 'bg-emerald-500/10 border-emerald-500/40 opacity-70'
+        : isCapped
+            ? 'bg-purple-950/20 border-purple-500/30'
+            : q.id === activeMandatoryId
+                ? 'bg-slate-900 border-red-600 shadow-[0_0_15px_rgba(220,38,38,0.2)]'
+                : 'bg-slate-900 border-white/5';
     return (
-        <div className={`relative w-full p-6 rounded-3xl border-2 transition-all ${isDone ? 'bg-emerald-500/10 border-emerald-500/40 opacity-70' : q.id === activeMandatoryId ? 'bg-slate-900 border-red-600 shadow-[0_0_15px_rgba(220,38,38,0.2)]' : 'bg-slate-900 border-white/5'}`}>
+        <div className={`relative w-full p-6 rounded-3xl border-2 transition-all ${borderClass}`}>
             <button onClick={handleCheckIn} className="flex items-center gap-4 w-full text-left">
                 <QuestIcon questId="q1" isDone={isDone} />
                 <div className="flex-1">
                     <h3 className={`font-black text-lg ${isDone ? 'text-emerald-400' : 'text-white'}`}>{q.title}</h3>
                     <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">{q.sub}</p>
                 </div>
-                <div className="text-right">
-                    <div className="font-black text-orange-500">{isDawn && hasMirror ? '+350' : `+${q.reward}`} 修為</div>
-                    <div className="text-xs font-bold text-yellow-400 mt-0.5">+{isDawn && hasMirror ? 35 : Math.floor(q.reward * 0.1)} 🪙</div>
-                </div>
+                {!isDone && isCapped ? <CurseBreakBadge /> : (
+                    <div className="text-right">
+                        <div className="font-black text-orange-500">{isDawn && hasMirror ? '+350' : `+${q.reward}`} 修為</div>
+                        <div className="text-xs font-bold text-yellow-400 mt-0.5">+{isDawn && hasMirror ? 35 : Math.floor(q.reward * 0.1)} 🪙</div>
+                    </div>
+                )}
             </button>
             {!isDone && (
                 <label className="flex items-center gap-2 mt-3 ml-16 cursor-pointer select-none" onClick={e => e.stopPropagation()}>
@@ -87,7 +106,7 @@ function Q1Card({ q, isDone, questLog, isDawn, setIsDawn, hasMirror, activeManda
                     />
                     <span className="text-xs text-slate-400 font-bold">
                         本次為破曉打拳（05:00–08:00 完成）
-                        {hasMirror && <span className="text-orange-400 ml-1">+150 修為</span>}
+                        {hasMirror && !isCapped && <span className="text-orange-400 ml-1">+150 修為</span>}
                     </span>
                 </label>
             )}
@@ -100,6 +119,8 @@ export function DailyQuestsTab({ weeklyQuestId, logs, logicalTodayStr, userInven
     const [isDawnMode, setIsDawnMode] = useState(false);
     const hasMirror = userInventory.includes('a2');
     const weeklyQuestName = DAILY_QUEST_CONFIG.find(q => q.id === weeklyQuestId)?.title;
+    const todayQCount = logs.filter(l => l.QuestID.startsWith('q') && getLogicalDateStr(l.Timestamp) === logicalTodayStr).length;
+    const isCapped = todayQCount >= 3;
 
     return (
         <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-500 text-center mx-auto">
@@ -130,6 +151,7 @@ export function DailyQuestsTab({ weeklyQuestId, logs, logicalTodayStr, userInven
                             setIsDawn={setIsDawnMode}
                             hasMirror={hasMirror}
                             activeMandatoryId={weeklyQuestId || ''}
+                            isCapped={isCapped}
                             onCheckIn={onCheckIn}
                             onUndo={onUndo}
                             formatCheckInTime={formatCheckInTime}
@@ -140,14 +162,23 @@ export function DailyQuestsTab({ weeklyQuestId, logs, logicalTodayStr, userInven
                 const isDone = logs.some(l => l.QuestID === q.id && getLogicalDateStr(l.Timestamp) === logicalTodayStr);
                 const questLog = logs.find(l => l.QuestID === q.id && getLogicalDateStr(l.Timestamp) === logicalTodayStr);
                 const isRecommended = q.id === weeklyQuestId;
+                const borderClass = isDone
+                    ? 'bg-emerald-500/10 border-emerald-500/40 opacity-70'
+                    : isCapped && !isDone
+                        ? 'bg-purple-950/20 border-purple-500/30'
+                        : isRecommended
+                            ? 'bg-slate-900 border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.2)]'
+                            : 'bg-slate-900 border-white/5';
                 return (
-                    <button key={q.id} onClick={() => !isDone ? onCheckIn(q) : onUndo(q)} className={`relative w-full p-6 rounded-3xl border-2 flex items-center gap-4 transition-all ${isDone ? 'bg-emerald-500/10 border-emerald-500/40 opacity-70' : isRecommended ? 'bg-slate-900 border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.2)]' : 'bg-slate-900 border-white/5'}`}>
+                    <button key={q.id} onClick={() => !isDone ? onCheckIn(q) : onUndo(q)} className={`relative w-full p-6 rounded-3xl border-2 flex items-center gap-4 transition-all ${borderClass}`}>
                         <QuestIcon questId={q.id} isDone={isDone} />
                         <div className="flex-1 text-left"><h3 className={`font-black text-lg ${isDone ? 'text-emerald-400' : 'text-white'}`}>{q.title}</h3><p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">{q.sub}</p></div>
-                        <div className="text-right">
-                            <div className="font-black text-orange-500">+{q.reward} 修為</div>
-                            <div className="text-xs font-bold text-yellow-400 mt-0.5">+{Math.floor(q.reward * 0.1)} 🪙</div>
-                        </div>
+                        {!isDone && isCapped ? <CurseBreakBadge /> : (
+                            <div className="text-right">
+                                <div className="font-black text-orange-500">+{q.reward} 修為</div>
+                                <div className="text-xs font-bold text-yellow-400 mt-0.5">+{Math.floor(q.reward * 0.1)} 🪙</div>
+                            </div>
+                        )}
                         {isDone && questLog && <div className="absolute bottom-1 right-2 text-[8px] font-mono text-emerald-500 opacity-60">{formatCheckInTime(questLog.Timestamp)}</div>}
                     </button>
                 );
