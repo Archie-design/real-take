@@ -7,6 +7,7 @@ import { generateTestimonyCard } from '@/lib/line/testimony-card';
 import { uploadTestimonyCardToDrive } from '@/lib/line/google-drive';
 
 export const runtime = 'nodejs';
+export const maxDuration = 30; // seconds
 
 export async function POST(req: Request) {
     const rawBody = await req.text();

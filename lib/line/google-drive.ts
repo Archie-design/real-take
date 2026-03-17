@@ -4,15 +4,14 @@ import { Readable } from 'stream';
 const FOLDER_ID = '1y8dqhIyJmUbu8JupnVKR4Rd5t3vJFgx1';
 
 function getDriveClient() {
-    const credentialsJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-    if (!credentialsJson) throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON is not set');
-
-    const credentials = JSON.parse(credentialsJson);
-    const auth = new google.auth.GoogleAuth({
-        credentials,
-        scopes: ['https://www.googleapis.com/auth/drive.file'],
+    const oauth2Client = new google.auth.OAuth2(
+        process.env.GOOGLE_OAUTH_CLIENT_ID,
+        process.env.GOOGLE_OAUTH_CLIENT_SECRET,
+    );
+    oauth2Client.setCredentials({
+        refresh_token: process.env.GOOGLE_OAUTH_REFRESH_TOKEN,
     });
-    return google.drive({ version: 'v3', auth });
+    return google.drive({ version: 'v3', auth: oauth2Client });
 }
 
 export async function uploadTestimonyCardToDrive(
