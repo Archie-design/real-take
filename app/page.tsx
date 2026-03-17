@@ -26,7 +26,7 @@ import { ShopTab } from '@/components/Tabs/ShopTab';
 import { AdminDashboard } from '@/components/Admin/AdminDashboard';
 import { processCheckInTransaction } from '@/app/actions/quest';
 import { triggerWeeklySnapshot, importRostersData, checkWeeklyW3Compliance, autoAssignSquadsForTesting, logAdminAction } from '@/app/actions/admin';
-import { getTestimonies } from '@/app/actions/testimony';
+import { getTestimonies } from '@/app/actions/testimonies_admin';
 import { drawWeeklyQuestForSquad, autoDrawAllSquads } from '@/app/actions/team';
 import { submitW4Application, reviewW4BySquadLeader, reviewW4ByAdmin, getW4Applications, getAdminActivityLog } from '@/app/actions/w4';
 import { generateWeeklyReview, generateCaptainBriefing } from '@/app/actions/gemini';

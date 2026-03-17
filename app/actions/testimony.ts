@@ -32,17 +32,6 @@ export async function saveTestimony(params: {
     if (error) throw new Error(error.message);
 }
 
-export async function getTestimonies(): Promise<import('@/types').Testimony[]> {
-    const supabase = getServiceClient();
-    const { data, error } = await supabase
-        .from('Testimonies')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(200);
-    if (error) throw new Error(error.message);
-    return data ?? [];
-}
-
 export async function upsertLineGroup(params: {
     groupId: string;
     groupName: string | null;
