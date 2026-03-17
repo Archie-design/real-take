@@ -8,7 +8,7 @@ import {
   Dice5, Loader2, RotateCcw
 } from 'lucide-react';
 
-import { CharacterStats, DailyLog, Quest, SystemSettings, TopicHistory, TemporaryQuest, W4Application, AdminLog } from '@/types';
+import { CharacterStats, DailyLog, Quest, SystemSettings, TopicHistory, TemporaryQuest, W4Application, AdminLog, Testimony } from '@/types';
 import { getLogicalDateStr, getWeeklyMonday } from '@/lib/utils/time';
 import { standardizePhone } from '@/lib/utils/phone';
 import { ROLE_CURE_MAP, DEFAULT_CONFIG, ADVENTURE_COST, ADMIN_PASSWORD, calculateLevelFromExp, ROLE_GROWTH_RATES } from '@/lib/constants';
@@ -26,6 +26,7 @@ import { ShopTab } from '@/components/Tabs/ShopTab';
 import { AdminDashboard } from '@/components/Admin/AdminDashboard';
 import { processCheckInTransaction } from '@/app/actions/quest';
 import { triggerWeeklySnapshot, importRostersData, checkWeeklyW3Compliance, autoAssignSquadsForTesting, logAdminAction } from '@/app/actions/admin';
+import { getTestimonies } from '@/app/actions/testimony';
 import { drawWeeklyQuestForSquad, autoDrawAllSquads } from '@/app/actions/team';
 import { submitW4Application, reviewW4BySquadLeader, reviewW4ByAdmin, getW4Applications, getAdminActivityLog } from '@/app/actions/w4';
 import { generateWeeklyReview, generateCaptainBriefing } from '@/app/actions/gemini';
@@ -83,6 +84,7 @@ export default function App() {
   const [isLoadingBriefing, setIsLoadingBriefing] = useState(false);
   const [squadApprovedW4Apps, setSquadApprovedW4Apps] = useState<W4Application[]>([]);
   const [adminLogs, setAdminLogs] = useState<AdminLog[]>([]);
+  const [testimonies, setTestimonies] = useState<Testimony[]>([]);
 
   const formatCheckInTime = (timestamp: string) => {
     const d = new Date(timestamp);
@@ -894,6 +896,7 @@ export default function App() {
       if (rankData) setLeaderboard(rankData as CharacterStats[]);
     };
     if (activeTab === 'rank' || view === 'admin') fetchRank();
+    if (view === 'admin') getTestimonies().then(setTestimonies).catch(console.error);
   }, [activeTab, view]);
 
   // Refresh w4 applications whenever the weekly tab becomes active
@@ -1048,6 +1051,7 @@ export default function App() {
           temporaryQuests={temporaryQuests}
           squadApprovedW4Apps={squadApprovedW4Apps}
           adminLogs={adminLogs}
+          testimonies={testimonies}
           onAddTempQuest={handleAddTempQuest}
           onToggleTempQuest={handleToggleTempQuest}
           onDeleteTempQuest={handleDeleteTempQuest}

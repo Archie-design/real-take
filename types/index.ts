@@ -118,6 +118,19 @@ export interface AdminLog {
   created_at: string;
 }
 
+export interface Testimony {
+  id: string;
+  line_group_id: string | null;
+  line_user_id: string;
+  display_name: string | null;
+  parsed_name: string | null;
+  parsed_date: string | null;
+  parsed_category: string | null;
+  content: string;
+  raw_message: string;
+  created_at: string;
+}
+
 export interface TopicHistory {
   id: number;
   TopicTitle: string;

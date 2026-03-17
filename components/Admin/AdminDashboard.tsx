@@ -1,6 +1,6 @@
 import React from 'react';
 import { Settings, X, BarChart3, Save, Users, Lock } from 'lucide-react';
-import { SystemSettings, CharacterStats, TopicHistory, TemporaryQuest, W4Application, AdminLog } from '@/types';
+import { SystemSettings, CharacterStats, TopicHistory, TemporaryQuest, W4Application, AdminLog, Testimony } from '@/types';
 
 const ACTION_LABELS: Record<string, string> = {
     temp_quest_add: '新增臨時任務',
@@ -26,6 +26,7 @@ interface AdminDashboardProps {
     temporaryQuests: TemporaryQuest[];
     squadApprovedW4Apps: W4Application[];
     adminLogs: AdminLog[];
+    testimonies: Testimony[];
     onAddTempQuest: (title: string, sub: string, desc: string, reward: number) => void;
     onToggleTempQuest: (id: string, active: boolean) => void;
     onDeleteTempQuest: (id: string) => void;
@@ -41,7 +42,7 @@ interface AdminDashboardProps {
 export function AdminDashboard({
     adminAuth, onAuth, systemSettings, updateGlobalSetting,
     leaderboard, topicHistory, temporaryQuests,
-    squadApprovedW4Apps, adminLogs,
+    squadApprovedW4Apps, adminLogs, testimonies,
     onAddTempQuest, onToggleTempQuest, onDeleteTempQuest,
     onTriggerSnapshot, onCheckW3Compliance, onAutoDrawAllSquads, onAutoAssignSquads,
     onImportRoster, onFinalReviewW4, onClose
@@ -293,6 +294,32 @@ export function AdminDashboard({
                                 </div>
                             ))
                         )}
+                    </div>
+                </section>
+
+                {/* 親證故事列表 */}
+                <section className="space-y-6">
+                    <div className="flex items-center gap-2 text-orange-500 font-black text-sm uppercase tracking-widest"><BarChart3 size={16} /> 親證故事存檔（{testimonies.length} 筆）</div>
+                    <div className="bg-slate-900 border-2 border-slate-800 rounded-4xl overflow-hidden shadow-xl max-h-[500px] overflow-y-auto divide-y divide-slate-800">
+                        {testimonies.length === 0 ? (
+                            <p className="text-sm text-slate-500 text-center py-8">尚無親證故事記錄</p>
+                        ) : testimonies.map(t => (
+                            <div key={t.id} className="p-4 hover:bg-white/5 transition-colors space-y-1">
+                                <div className="flex justify-between items-start gap-2">
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-black text-white">
+                                            {t.parsed_name ?? t.display_name ?? '未知'}
+                                            {t.parsed_category && <span className="ml-2 text-[10px] font-normal bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded-lg">{t.parsed_category}</span>}
+                                        </p>
+                                        <p className="text-xs text-slate-400 mt-1 leading-relaxed line-clamp-3">{t.content}</p>
+                                    </div>
+                                    <div className="text-right shrink-0 text-[10px] text-slate-500 space-y-1">
+                                        <p>{t.parsed_date ?? '日期未填'}</p>
+                                        <p>{new Date(t.created_at).toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </section>
 
