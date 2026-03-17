@@ -2,6 +2,55 @@ import React from 'react';
 import { Settings, X, BarChart3, Save, Users, Lock } from 'lucide-react';
 import { SystemSettings, CharacterStats, TopicHistory, TemporaryQuest, W4Application, AdminLog, Testimony } from '@/types';
 
+import { ADMIN_PASSWORD } from '@/lib/constants';
+
+function LineRichMenuSection() {
+    const [status, setStatus] = React.useState<'idle' | 'loading' | 'ok' | 'error'>('idle');
+    const [msg, setMsg] = React.useState('');
+
+    const handleSetup = async () => {
+        setStatus('loading');
+        setMsg('');
+        try {
+            const res = await fetch(`/api/admin/setup-richmenu?key=${encodeURIComponent(ADMIN_PASSWORD)}`);
+            const data = await res.json();
+            if (data.success) {
+                setStatus('ok');
+                setMsg(`選單已設定完成（ID: ${data.richMenuId}）`);
+            } else {
+                setStatus('error');
+                setMsg(data.error ?? '未知錯誤');
+            }
+        } catch (e: unknown) {
+            setStatus('error');
+            setMsg(e instanceof Error ? e.message : '連線失敗');
+        }
+    };
+
+    return (
+        <section className="space-y-6">
+            <div className="flex items-center gap-2 text-orange-500 font-black text-sm uppercase tracking-widest">
+                <Settings size={16} /> LINE 機器人選單設定
+            </div>
+            <div className="bg-slate-900 border-2 border-slate-800 p-8 rounded-4xl space-y-4 shadow-xl">
+                <p className="text-xs text-slate-400">點擊後將自動產生選單圖片並透過 LINE API 設為預設選單，需要約 10–20 秒。</p>
+                <button
+                    onClick={handleSetup}
+                    disabled={status === 'loading'}
+                    className="w-full bg-green-700 p-4 rounded-2xl text-white font-black shadow-lg hover:bg-green-600 transition-colors disabled:opacity-50"
+                >
+                    {status === 'loading' ? '⏳ 設定中…' : '📱 設定 LINE 定課選單'}
+                </button>
+                {msg && (
+                    <p className={`text-xs text-center font-bold ${status === 'ok' ? 'text-green-400' : 'text-red-400'}`}>
+                        {msg}
+                    </p>
+                )}
+            </div>
+        </section>
+    );
+}
+
 const ACTION_LABELS: Record<string, string> = {
     temp_quest_add: '新增臨時任務',
     temp_quest_toggle: '切換臨時任務狀態',
@@ -290,6 +339,9 @@ export function AdminDashboard({
                         )}
                     </div>
                 </section>
+
+                {/* LINE 選單設定 */}
+                <LineRichMenuSection />
 
                 {/* 親證故事列表 */}
                 <section className="space-y-6">
