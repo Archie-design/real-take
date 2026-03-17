@@ -72,9 +72,8 @@ export async function POST(req: Request) {
                     }],
                 });
 
-                // Save to DB after replying (non-blocking for user experience)
-                saveTestimony({ lineUserId, groupId, displayName, rawMessage: text, testimony })
-                    .catch(err => console.error('Testimony save failed:', err));
+                // Save to DB after replying — await so Vercel doesn't terminate before write completes
+                await saveTestimony({ lineUserId, groupId, displayName, rawMessage: text, testimony });
 
                 continue;
             }
