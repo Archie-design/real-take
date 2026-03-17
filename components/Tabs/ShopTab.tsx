@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { ShoppingBag, Coins, Users, User, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react';
+import { ShoppingBag, Coins, Users, User, CheckCircle2, AlertCircle } from 'lucide-react';
 import { ARTIFACTS_CONFIG } from '@/lib/constants';
 import { purchaseArtifact, transferCoinsToTeam } from '@/app/actions/store';
-import { transferGoldenDiceToTeam } from '@/app/actions/dice';
 import { CharacterStats, TeamSettings } from '@/types';
 
 interface ShopTabProps {
@@ -16,7 +15,6 @@ interface ShopTabProps {
 export function ShopTab({ userData, teamSettings, teamMemberCount = 1, onPurchaseSuccess, onShowMessage }: ShopTabProps) {
     const [isBuying, setIsBuying] = useState<string | null>(null);
     const [transferAmount, setTransferAmount] = useState<number | ''>('');
-    const [goldenTransferAmount, setGoldenTransferAmount] = useState<number | ''>('');
     const [isTransferring, setIsTransferring] = useState(false);
 
     const handleTransfer = async () => {
@@ -27,25 +25,6 @@ export function ShopTab({ userData, teamSettings, teamMemberCount = 1, onPurchas
             if (res.success) {
                 onShowMessage(`已成功將 ${transferAmount} 金幣注入團隊資金！`, "success");
                 setTransferAmount('');
-                onPurchaseSuccess();
-            } else {
-                onShowMessage(res.error || "轉帳失敗", "error");
-            }
-        } catch (error: any) {
-            onShowMessage(`系統異常: ${error.message}`, "error");
-        } finally {
-            setIsTransferring(false);
-        }
-    };
-
-    const handleGoldenTransfer = async () => {
-        if (!userData.TeamName || !goldenTransferAmount || typeof goldenTransferAmount !== 'number' || goldenTransferAmount <= 0) return;
-        setIsTransferring(true);
-        try {
-            const res = await transferGoldenDiceToTeam(userData.UserID, userData.TeamName, goldenTransferAmount);
-            if (res.success) {
-                onShowMessage(`已成功將 ${goldenTransferAmount} 枚黃金骰子注入團隊物資！`, "success");
-                setGoldenTransferAmount('');
                 onPurchaseSuccess();
             } else {
                 onShowMessage(res.error || "轉帳失敗", "error");
@@ -100,9 +79,7 @@ export function ShopTab({ userData, teamSettings, teamMemberCount = 1, onPurchas
                     <div className="flex items-center gap-1.5 text-yellow-500 bg-yellow-500/10 px-3 py-1.5 rounded-xl">
                         <User size={14} /> 個人金幣: {userData.Coins || 0}
                     </div>
-                    <div className="flex items-center gap-1.5 text-orange-400 bg-orange-500/10 px-3 py-1.5 rounded-xl text-[10px]">
-                        <Sparkles size={12} /> 黃金骰子: {userData.GoldenDice || 0}
-                    </div>
+
                     {userData.TeamName && (
                         <div className="flex items-center gap-1.5 text-indigo-400 bg-indigo-500/10 px-3 py-1.5 rounded-xl">
                             <Users size={14} /> 團隊資金: {teamSettings?.team_coins || 0}
@@ -113,33 +90,6 @@ export function ShopTab({ userData, teamSettings, teamMemberCount = 1, onPurchas
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-                {userData.TeamName && (
-                    <div className="bg-indigo-950/20 border-2 border-indigo-500/30 p-5 rounded-3xl flex flex-col justify-between hover:bg-indigo-950/30 transition-all">
-                        <div>
-                            <div className="flex items-center gap-2 text-indigo-400 font-black text-sm mb-2 italic tracking-wider">
-                                <Users size={18} /> 共享黃金骰
-                            </div>
-                            <p className="text-xs text-indigo-200/60 font-medium mb-3">捐獻黃金骰子至部隊公庫</p>
-                            <input
-                                type="number"
-                                min="1"
-                                max={userData.GoldenDice || 0}
-                                value={goldenTransferAmount}
-                                onChange={e => setGoldenTransferAmount(e.target.value ? parseInt(e.target.value, 10) : '')}
-                                placeholder="數量"
-                                className="w-full bg-slate-950/50 border border-indigo-500/20 rounded-xl px-3 py-2 text-xs text-white font-bold mb-3 outline-none focus:border-indigo-500/50"
-                            />
-                        </div>
-                        
-                        <button
-                            onClick={handleGoldenTransfer}
-                            disabled={isTransferring || !goldenTransferAmount || goldenTransferAmount <= 0 || goldenTransferAmount > (userData.GoldenDice || 0)}
-                            className="w-full bg-indigo-600 py-2.5 rounded-xl font-black text-sm text-white hover:bg-indigo-500 active:scale-95 disabled:opacity-40 transition-all shadow-lg shadow-indigo-900/20"
-                        >
-                            {isTransferring ? '交付中' : '交付部隊'}
-                        </button>
-                    </div>
-                )}
             </div>
 
             {userData.TeamName && (

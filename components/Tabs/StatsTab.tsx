@@ -1,5 +1,5 @@
 import React from 'react';
-import { Skull, Wand2, Sparkles, Shield, Heart, Brain, Zap, Trophy, Coins, Cake } from 'lucide-react';
+import { Skull, Sparkles, Shield, Heart, Brain, Zap, Trophy, Coins, Cake } from 'lucide-react';
 import { CharacterStats } from '@/types';
 
 interface StatCardProps {
@@ -41,18 +41,6 @@ export function StatsTab({ userData, roleTrait }: StatsTabProps) {
 
     return (
         <div className="space-y-8 animate-in zoom-in-95 duration-500 mx-auto text-center">
-            <div className={`p-8 rounded-4xl border-2 shadow-2xl relative overflow-hidden transition-all ${roleTrait.isCursed ? 'bg-red-950/30 border-red-500/50' : 'bg-emerald-950/30 border-emerald-500/50'}`}>
-                <div className="flex items-center justify-between mb-4 text-center">
-                    <div className="flex items-center gap-2">
-                        {roleTrait.isCursed ? <Skull className="text-red-500" size={20} /> : <Wand2 className="text-emerald-400" size={20} />}
-                        <span className={`text-sm font-black uppercase tracking-widest ${roleTrait.isCursed ? 'text-red-400' : 'text-emerald-400'}`}>
-                            {roleTrait.isCursed ? roleTrait.curseName : '天命覺醒：' + userData.Role}
-                        </span>
-                    </div>
-                </div>
-                <p className="text-xs text-white leading-relaxed text-left">{roleTrait.isCursed ? roleTrait.curseEffect : roleTrait.talent}</p>
-            </div>
-
             <div className="grid grid-cols-2 gap-4">
                 <div className="bg-gradient-to-br from-yellow-900/40 to-slate-900 border-2 border-yellow-500/20 p-6 rounded-4xl shadow-2xl text-center flex flex-col items-center justify-center">
                     <Coins className="text-yellow-500 mb-2" size={24} />

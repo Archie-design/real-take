@@ -1066,7 +1066,18 @@ export default function App() {
 
       {view === 'app' && <HomeView />}
       {view === 'map' && userData && (
-        <WorldMap
+        <>
+          {/* 冒險狀態列：詛咒/天賦效果 + 黃金骰子 */}
+          <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between gap-2 px-4 py-2 bg-slate-950/90 backdrop-blur-sm border-b border-slate-800">
+            <span className={`text-[10px] font-black shrink-0 ${roleTrait?.isCursed ? 'text-red-400' : 'text-emerald-400'}`}>
+              {roleTrait?.isCursed ? `☠️ ${roleTrait.curseName}` : '✨ 天命覺醒'}
+            </span>
+            <p className="text-[10px] text-white/50 leading-tight truncate flex-1 text-center">
+              {roleTrait?.isCursed ? roleTrait.curseEffect : roleTrait?.talent}
+            </p>
+            <span className="text-[10px] font-black text-amber-400 shrink-0">⭐ {userData.GoldenDice}</span>
+          </div>
+          <WorldMap
           userData={userData}
           mapData={mapData}
           corridorL={corridorL}
@@ -1094,6 +1105,7 @@ dbEntities={mapEntities}
           }}
           onUpdateSteps={setStepsRemaining}
         />
+        </>
       )}
 
       {showGoldenDicePicker && (

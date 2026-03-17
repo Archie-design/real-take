@@ -1,5 +1,5 @@
 import React from 'react';
-import { LogOut, Coins, Dice5 } from 'lucide-react';
+import { LogOut, Coins } from 'lucide-react';
 import { CharacterStats } from '@/types';
 import { ROLE_CURE_MAP, getExpForNextLevel } from '@/lib/constants';
 
@@ -53,9 +53,7 @@ export function Header({ userData, onLogout }: HeaderProps) {
                         <div className="flex items-center gap-1.5 bg-yellow-500/10 text-yellow-500 px-2 py-0.5 rounded-lg text-[10px] font-black shadow-inner border border-yellow-500/20">
                             <Coins size={12} /> {userData?.Coins || 0}
                         </div>
-                        <div className="flex items-center gap-1.5 bg-amber-400/10 text-amber-400 px-2 py-0.5 rounded-lg text-[10px] font-black shadow-inner border border-amber-400/20">
-                            <Dice5 size={12} /> {userData?.GoldenDice || 0}
-                        </div>
+
                     </div>
                     <p className="text-[10px] text-slate-400 font-mono tracking-tighter mix-blend-screen">{userData?.Level! >= 99 ? 'MAX' : `${expInCurrentLevel} / ${nextLevelExp}`}</p>
                 </div>
