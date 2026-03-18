@@ -149,8 +149,12 @@ export const WorldMap: React.FC<WorldMapProps> = ({
 
     // Dragging state
     const isDragging = useRef(false);
+    const hasDragged = useRef(false); // true only after movement exceeds tap threshold
     const dragStart = useRef({ x: 0, y: 0 });
+    const tapOrigin = useRef({ x: 0, y: 0 }); // initial touch position, never updated
+    const lastTouchTime = useRef(0); // suppress synthetic mouse events after touch
     const mapContainerRef = useRef<HTMLDivElement>(null);
+    const hudRef = useRef<HTMLDivElement>(null); // dice HUD ref — events from inside are ignored by map
 
     // Constants
     const { HEX_SIZE_WORLD, CENTER_SIDE, SUBZONE_SIDE } = DEFAULT_CONFIG;
@@ -345,6 +349,12 @@ export const WorldMap: React.FC<WorldMapProps> = ({
         if (isDragging.current) {
             const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
             const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+            const totalDx = Math.abs(clientX - tapOrigin.current.x);
+            const totalDy = Math.abs(clientY - tapOrigin.current.y);
+            const panThreshold = 'touches' in e ? 14 : 5;
+            // Don't pan camera until movement clearly exceeds tap threshold
+            if (!hasDragged.current && totalDx < panThreshold && totalDy < panThreshold) return;
+            hasDragged.current = true;
             const dx = clientX - dragStart.current.x;
             const dy = clientY - dragStart.current.y;
             setCamX(prev => prev + dx / zoom);
@@ -374,28 +384,32 @@ export const WorldMap: React.FC<WorldMapProps> = ({
     }, [getCurrentPointerHex, zoom, hoveredHexKey, fullGrid]);
 
     const handlePointerDown = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+        const isTouch = 'touches' in e;
+        // Ignore events originating from within the dice HUD panel
+        const nativeTarget = ('touches' in e ? e.touches[0]?.target : (e as React.MouseEvent).target) as Node | null;
+        if (nativeTarget && hudRef.current?.contains(nativeTarget)) return;
+        // Ignore synthetic mouse events that fire after touch (within 500ms)
+        if (!isTouch && Date.now() - lastTouchTime.current < 500) return;
+        if (isTouch) lastTouchTime.current = Date.now();
         isDragging.current = true;
-        dragStart.current = {
-            x: 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX,
-            y: 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY
-        };
+        hasDragged.current = false;
+        const x = isTouch ? (e as React.TouchEvent).touches[0].clientX : (e as React.MouseEvent).clientX;
+        const y = isTouch ? (e as React.TouchEvent).touches[0].clientY : (e as React.MouseEvent).clientY;
+        dragStart.current = { x, y };
+        tapOrigin.current = { x, y };
     }, []);
 
-    const handlePointerUp = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    const handlePointerUp = useCallback((_e: React.MouseEvent | React.TouchEvent) => {
         // Always reset drag state first — prevents stuck-drag when early returns skip the end of function
         const wasDragging = isDragging.current;
         isDragging.current = false;
 
         // If it was a click without dragging much, trigger Click logic
         if (wasDragging) {
-            const clientX = 'changedTouches' in e ? e.changedTouches[0].clientX : (e as React.MouseEvent).clientX;
-            const clientY = 'changedTouches' in e ? e.changedTouches[0].clientY : (e as React.MouseEvent).clientY;
-            const dx = Math.abs(clientX - dragStart.current.x);
-            const dy = Math.abs(clientY - dragStart.current.y);
-
-            if (dx < 5 && dy < 5) {
-                // Was a click
-                const hex = getCurrentPointerHex(clientX, clientY);
+            if (!hasDragged.current) {
+                // Was a tap/click — use initial touch position for accurate hex detection
+                // (camX/camY unchanged since no camera movement occurred)
+                const hex = getCurrentPointerHex(tapOrigin.current.x, tapOrigin.current.y);
                 if (hex) {
                     // Check for targetable adjacent entities first
                     const allEntities = [...dbEntities];
@@ -568,25 +582,29 @@ export const WorldMap: React.FC<WorldMapProps> = ({
     return (
         <div className="h-full bg-slate-950 flex flex-col overflow-hidden relative animate-in fade-in">
             {/* Header */}
-            <header className="p-6 bg-slate-900 border-b border-white/10 flex justify-between items-center z-20 shadow-2xl shrink-0">
-                <div className="flex items-center gap-3">
+            <header className="px-3 py-2 md:px-6 md:py-4 bg-slate-900 border-b border-white/10 flex justify-between items-center z-20 shadow-2xl shrink-0">
+                <div className="hidden md:flex items-center gap-3">
                     <div className="p-3 bg-emerald-600 rounded-2xl text-white shadow-lg border border-emerald-400/20"><MapIcon size={20} /></div>
                     <div className="text-left text-white font-black text-xl tracking-widest uppercase">心蓮六瓣 <span className="opacity-50 text-xs">// World Map</span></div>
                 </div>
-                <div className="flex gap-2">
-                    <button onClick={() => setIsOverviewOpen(true)} className="flex items-center justify-center p-3 bg-sky-600/20 text-sky-400 hover:bg-sky-600 hover:text-white rounded-2xl transition-all border border-sky-500/20 active:scale-95 shadow-lg">
-                        <Globe size={20} />
+                {/* Mobile: show map icon only */}
+                <div className="flex md:hidden items-center">
+                    <div className="p-2 bg-emerald-600 rounded-xl text-white shadow-lg border border-emerald-400/20"><MapIcon size={16} /></div>
+                </div>
+                <div className="flex gap-1.5 md:gap-2">
+                    <button onClick={() => setIsOverviewOpen(true)} className="flex items-center justify-center p-2 md:p-3 bg-sky-600/20 text-sky-400 hover:bg-sky-600 hover:text-white rounded-xl md:rounded-2xl transition-all border border-sky-500/20 active:scale-95 shadow-lg">
+                        <Globe size={18} />
                     </button>
-                    <button onClick={() => setIsShopOpen(true)} className="flex items-center justify-center p-3 bg-orange-600/20 text-orange-400 hover:bg-orange-600 hover:text-white rounded-2xl transition-all border border-orange-500/20 active:scale-95 shadow-lg relative">
-                        <Store size={20} />
+                    <button onClick={() => setIsShopOpen(true)} className="flex items-center justify-center p-2 md:p-3 bg-orange-600/20 text-orange-400 hover:bg-orange-600 hover:text-white rounded-xl md:rounded-2xl transition-all border border-orange-500/20 active:scale-95 shadow-lg relative">
+                        <Store size={18} />
                     </button>
-                    <button onClick={() => setIsInventoryOpen(true)} className="flex items-center justify-center p-3 bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600 hover:text-white rounded-2xl transition-all border border-indigo-500/20 active:scale-95 shadow-lg relative">
-                        <Package size={20} />
+                    <button onClick={() => setIsInventoryOpen(true)} className="flex items-center justify-center p-2 md:p-3 bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600 hover:text-white rounded-xl md:rounded-2xl transition-all border border-indigo-500/20 active:scale-95 shadow-lg relative">
+                        <Package size={18} />
                         {userData.GameInventory && userData.GameInventory.length > 0 && (
                             <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-slate-900 animate-pulse"></span>
                         )}
                     </button>
-                    <button onClick={onBack} className="flex items-center gap-2 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-black rounded-2xl transition-all border border-white/10 shadow-xl active:scale-95"><ChevronLeft size={16} /> 返回定課</button>
+                    <button onClick={onBack} className="flex items-center gap-1.5 px-3 py-2 md:px-6 md:py-3 bg-slate-800 hover:bg-slate-700 text-white font-black rounded-xl md:rounded-2xl transition-all border border-white/10 shadow-xl active:scale-95 text-xs md:text-sm"><ChevronLeft size={14} /> <span className="hidden md:inline">返回定課</span><span className="md:hidden">返回</span></button>
                 </div>
             </header>
 
@@ -729,16 +747,17 @@ export const WorldMap: React.FC<WorldMapProps> = ({
                 {(() => {
                     return (
                         <div
-                            className="absolute pointer-events-none z-20 flex flex-col items-end"
+                            ref={hudRef}
+                            className="absolute pointer-events-auto z-20 flex flex-col items-end"
                             style={{ right: 12, bottom: 12 }}
+                            onMouseDown={e => e.stopPropagation()}
+                            onMouseUp={e => e.stopPropagation()}
+                            onTouchStart={e => e.stopPropagation()}
+                            onTouchEnd={e => e.stopPropagation()}
                         >
                             <div
-                                className={`mt-6 p-3 rounded-[2rem] bg-slate-900/80 border ${moveMultiplier && moveMultiplier > 1 ? 'border-yellow-400 shadow-[0_0_30px_rgba(250,204,21,0.5)] animate-pulse' : 'border-white/10 shadow-2xl'} backdrop-blur-xl flex flex-col gap-3 items-center pointer-events-auto relative`}
-                                style={{ width: 200 }}
-                                onMouseDown={e => e.stopPropagation()}
-                                onMouseUp={e => e.stopPropagation()}
-                                onTouchStart={e => e.stopPropagation()}
-                                onTouchEnd={e => e.stopPropagation()}
+                                className={`mt-6 p-3 rounded-[2rem] bg-slate-900/80 border ${moveMultiplier && moveMultiplier > 1 ? 'border-yellow-400 shadow-[0_0_30px_rgba(250,204,21,0.5)] animate-pulse' : 'border-white/10 shadow-2xl'} backdrop-blur-xl flex flex-col gap-2 md:gap-3 items-center pointer-events-auto relative`}
+                                style={{ width: 'min(170px, 45vw)' }}
                             >
                                 {moveMultiplier && moveMultiplier > 1 && (
                                     <div className="absolute -top-3 bg-yellow-400 text-black px-3 py-0.5 rounded-full text-xs font-black tracking-widest flex items-center gap-1 shadow-lg shadow-yellow-500/50">
@@ -834,7 +853,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({
                     const hpPct = Math.max(0, Math.min(1, currentHP / maxHP));
                     const hpColor = hpPct > 0.6 ? 'text-emerald-400' : hpPct > 0.3 ? 'text-yellow-400' : 'text-red-400';
                     return (
-                        <div className="absolute bottom-6 left-6 bg-slate-900/80 p-4 rounded-3xl border border-white/10 backdrop-blur-xl shadow-2xl select-none pointer-events-none z-30 space-y-3 min-w-[160px]">
+                        <div className="absolute bottom-4 left-3 bg-slate-900/80 p-2.5 md:p-4 rounded-2xl md:rounded-3xl border border-white/10 backdrop-blur-xl shadow-2xl select-none pointer-events-none z-30 space-y-2 md:space-y-3 min-w-[130px] md:min-w-[160px]">
                             {/* HP bar */}
                             <div>
                                 <div className="flex justify-between items-center mb-1">
@@ -862,8 +881,8 @@ export const WorldMap: React.FC<WorldMapProps> = ({
                                     <div className="text-sm font-black text-amber-400">{userData.EnergyDice}</div>
                                 </div>
                             </div>
-                            {/* Coordinates */}
-                            <div className="flex items-center gap-1.5 text-[9px] text-slate-600 font-mono">
+                            {/* Coordinates — hidden on mobile to save space */}
+                            <div className="hidden md:flex items-center gap-1.5 text-[9px] text-slate-600 font-mono">
                                 <Footprints size={10} /> {userData.CurrentQ}, {userData.CurrentR}
                             </div>
                         </div>
