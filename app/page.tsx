@@ -1017,7 +1017,7 @@ export default function App() {
             onShowMessage={(msg, type) => setModalMessage({ text: msg, type })}
           />
         )}
-        {activeTab === 'captain' && showCaptainTab && (
+        {activeTab === 'captain' && showCaptainTab && userData && (
           <CaptainTab
             teamName={userData.TeamName || '未編組'}
             teamSettings={teamSettings}
@@ -1029,7 +1029,7 @@ export default function App() {
             isLoadingBriefing={isLoadingBriefing}
           />
         )}
-        {activeTab === 'commandant' && showCommandantTab && (
+        {activeTab === 'commandant' && showCommandantTab && userData && (
           <CommandantTab
             userData={userData}
             apps={squadApprovedW4Apps}
