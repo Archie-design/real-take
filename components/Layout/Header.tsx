@@ -32,9 +32,17 @@ export function Header({ userData, onLogout }: HeaderProps) {
             </button>
 
             <div className="relative shrink-0 mx-auto text-center">
-                <div className="w-24 h-24 bg-orange-600 rounded-4xl flex items-center justify-center text-white text-5xl font-black shadow-lg mx-auto">
-                    {userData?.Name?.[0]}
-                </div>
+                {userData?.Role && ROLE_CURE_MAP[userData.Role] ? (
+                    <img
+                        src={`/images/avatars/${userData.Role}.png`}
+                        alt={userData.Role}
+                        className="w-24 h-24 rounded-4xl shadow-lg mx-auto object-cover"
+                    />
+                ) : (
+                    <div className="w-24 h-24 bg-orange-600 rounded-4xl flex items-center justify-center text-white text-5xl font-black shadow-lg mx-auto">
+                        {userData?.Name?.[0]}
+                    </div>
+                )}
                 <div className="absolute -bottom-2 -right-2 bg-yellow-500 text-slate-950 text-[10px] font-black px-2 py-1 rounded-full border-4 border-slate-900">
                     LV.{userData?.Level}
                 </div>

@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
-import { ChevronLeft, MapIcon, Dice5, Loader2, Minus, Plus, Footprints, Package, Store, LocateFixed } from 'lucide-react';
+import { ChevronLeft, MapIcon, Dice5, Loader2, Minus, Plus, Footprints, Package, Store, LocateFixed, Globe } from 'lucide-react';
 import { CharacterStats, HexData } from '@/types';
 import { DEFAULT_CONFIG, TERRAIN_TYPES, ROLE_CURE_MAP, ZONES } from '@/lib/constants';
 import { getHexRegion, axialToPixelPos, getHexDist, pixelToAxial, getCombatMultiplier, getHexDirection, hexLineDraw } from '@/lib/utils/hex';
 import HexNode from '@/components/MapEditor/HexNode';
 import { GameInventoryModal } from '@/components/MapEditor/GameInventoryModal';
+import { WorldOverview } from '@/components/Map/WorldOverview';
 import { NPCShopModal } from '@/components/MapEditor/NPCShopModal';
 import { CombatModal } from '@/components/MapEditor/CombatModal';
 import { buyGameItem, useGameItem } from '@/app/actions/items';
@@ -114,6 +115,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({
     const [camX, setCamX] = useState(() => -axialToPixelPos(initialQ, initialR, DEFAULT_CONFIG.HEX_SIZE_WORLD).x);
     const [camY, setCamY] = useState(() => -axialToPixelPos(initialQ, initialR, DEFAULT_CONFIG.HEX_SIZE_WORLD).y);
     const [zoom, setZoom] = useState(1);
+    const [isOverviewOpen, setIsOverviewOpen] = useState(false);
     const [rollAmount, setRollAmount] = useState(1);
     const [hoveredHexKey, setHoveredHexKey] = useState<string | null>(null);
     const [interceptTriggeredPos, setInterceptTriggeredPos] = useState<string | null>(null);
@@ -555,7 +557,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({
     }, [plannedPath, roleTrait, dbEntities, fullGrid, userData, onMoveCharacter, onShowMessage]);
 
     const handleWheel = useCallback((e: React.WheelEvent) => {
-        setZoom(prev => Math.min(Math.max(0.3, prev - Math.sign(e.deltaY) * 0.1), 3));
+        setZoom(prev => Math.min(Math.max(0.3, prev - Math.sign(e.deltaY) * 0.1), 6));
     }, []);
 
     // Player Pixel
@@ -564,14 +566,17 @@ export const WorldMap: React.FC<WorldMapProps> = ({
     }, [userData.CurrentQ, userData.CurrentR, HEX_SIZE_WORLD]);
 
     return (
-        <div className="min-h-screen bg-slate-950 flex flex-col overflow-hidden relative animate-in fade-in">
+        <div className="h-full bg-slate-950 flex flex-col overflow-hidden relative animate-in fade-in">
             {/* Header */}
-            <header className="p-6 bg-slate-900 border-b border-white/10 flex justify-between items-center z-20 shadow-2xl absolute top-0 left-0 right-0">
+            <header className="p-6 bg-slate-900 border-b border-white/10 flex justify-between items-center z-20 shadow-2xl shrink-0">
                 <div className="flex items-center gap-3">
                     <div className="p-3 bg-emerald-600 rounded-2xl text-white shadow-lg border border-emerald-400/20"><MapIcon size={20} /></div>
                     <div className="text-left text-white font-black text-xl tracking-widest uppercase">心蓮六瓣 <span className="opacity-50 text-xs">// World Map</span></div>
                 </div>
                 <div className="flex gap-2">
+                    <button onClick={() => setIsOverviewOpen(true)} className="flex items-center justify-center p-3 bg-sky-600/20 text-sky-400 hover:bg-sky-600 hover:text-white rounded-2xl transition-all border border-sky-500/20 active:scale-95 shadow-lg">
+                        <Globe size={20} />
+                    </button>
                     <button onClick={() => setIsShopOpen(true)} className="flex items-center justify-center p-3 bg-orange-600/20 text-orange-400 hover:bg-orange-600 hover:text-white rounded-2xl transition-all border border-orange-500/20 active:scale-95 shadow-lg relative">
                         <Store size={20} />
                     </button>
@@ -657,9 +662,23 @@ export const WorldMap: React.FC<WorldMapProps> = ({
                                 return (
                                     <g key={`tm_${e.id}`} transform={`translate(${pos.x}, ${pos.y})`} style={{ cursor: dist <= 2 ? 'pointer' : 'default', pointerEvents: 'auto' }}>
                                         <circle r={10} fill="rgba(96, 165, 250, 0.3)" className="animate-ping" />
-                                        <circle r={7} fill="rgba(59, 130, 246, 0.8)" stroke="white" strokeWidth={1} />
-                                        <text y={4} textAnchor="middle" fontSize={11} className="drop-shadow-lg">{e.icon}</text>
-                                        <text y={18} textAnchor="middle" fontSize={7} fill="#93c5fd" fontWeight="bold" className="drop-shadow">{e.name}</text>
+                                        {e.data?.role && ROLE_CURE_MAP[e.data.role] ? (
+                                            <image
+                                                href={`/images/map-sprites/${e.data.role}.png`}
+                                                x={-12}
+                                                y={-36}
+                                                width={24}
+                                                height={36}
+                                                preserveAspectRatio="xMidYMax meet"
+                                                style={{ filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.9))' }}
+                                            />
+                                        ) : (
+                                            <>
+                                                <circle r={7} fill="rgba(59, 130, 246, 0.8)" stroke="white" strokeWidth={1} />
+                                                <text y={4} textAnchor="middle" fontSize={11} className="drop-shadow-lg">{e.icon}</text>
+                                            </>
+                                        )}
+                                        <text y={11} textAnchor="middle" fontSize={7} fill="#93c5fd" fontWeight="bold" className="drop-shadow">{e.name}</text>
                                     </g>
                                 );
                             })}
@@ -686,11 +705,22 @@ export const WorldMap: React.FC<WorldMapProps> = ({
 
                         {/* 3. Player Character — avatar & name only; HUD is HTML overlay below */}
                         <g transform={`translate(${playerPixel.x}, ${playerPixel.y})`}>
-                            {/* SVG text emoji: stable on all mobile browsers, no foreignObject needed */}
-                            <text y={-4} textAnchor="middle" fontSize={18} dominantBaseline="auto" style={{ userSelect: 'none' }}>
-                                {ROLE_CURE_MAP[userData.Role]?.avatar || '👤'}
-                            </text>
-                            <text y={14} textAnchor="middle" fontSize={8} fontWeight="900" fill="white" style={{ textShadow: '0 2px 4px black, 0 -1px 2px black' }}>{userData.Name}</text>
+                            {ROLE_CURE_MAP[userData.Role] ? (
+                                <image
+                                    href={`/images/map-sprites/${userData.Role}.png`}
+                                    x={-12}
+                                    y={-36}
+                                    width={24}
+                                    height={36}
+                                    preserveAspectRatio="xMidYMax meet"
+                                    style={{ filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.9))' }}
+                                />
+                            ) : (
+                                <text y={-4} textAnchor="middle" fontSize={18} dominantBaseline="auto" style={{ userSelect: 'none' }}>
+                                    {ROLE_CURE_MAP[userData.Role]?.avatar || '👤'}
+                                </text>
+                            )}
+                            <text y={11} textAnchor="middle" fontSize={8} fontWeight="900" fill="white" style={{ textShadow: '0 2px 4px black, 0 -1px 2px black' }}>{userData.Name}</text>
                         </g>
                     </svg>
                 </div>
@@ -843,7 +873,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({
                 {/* Recenter button — appears when player has panned away from character */}
                 {(Math.abs(camX + playerPixel.x) > 10 || Math.abs(camY + playerPixel.y) > 10) && (
                     <button
-                        className="absolute bottom-6 right-6 z-30 flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-slate-900/90 border border-white/10 text-cyan-400 text-[11px] font-black shadow-xl backdrop-blur-xl active:scale-95 transition-all"
+                        className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-slate-900/90 border border-white/10 text-cyan-400 text-[11px] font-black shadow-xl backdrop-blur-xl active:scale-95 transition-all"
                         onClick={() => { setCamX(-playerPixel.x); setCamY(-playerPixel.y); }}
                     >
                         <LocateFixed size={13} /> 回到角色
@@ -1066,6 +1096,16 @@ export const WorldMap: React.FC<WorldMapProps> = ({
                     </div>
                 </div>
             )}
+
+            <WorldOverview
+                isOpen={isOverviewOpen}
+                onClose={() => setIsOverviewOpen(false)}
+                mapData={mapData}
+                corridorL={corridorL}
+                corridorW={corridorW}
+                dbEntities={dbEntities ?? []}
+                userData={userData}
+            />
         </div>
     );
 };

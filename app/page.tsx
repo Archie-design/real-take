@@ -965,7 +965,7 @@ export default function App() {
       <GmToolbar />
 
       <nav className="sticky top-0 z-20 bg-slate-950/90 backdrop-blur-md flex p-4 gap-2 border-b border-white/5 shadow-xl overflow-x-auto no-scrollbar">
-        <button onClick={() => setActiveTab('daily')} className={`shrink-0 px-6 py-4 rounded-2xl text-xs font-black transition-all ${activeTab === 'daily' ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/20' : 'bg-slate-900 text-slate-500'}`}>修行定課</button>
+        <button onClick={() => setActiveTab('daily')} className={`shrink-0 px-6 py-4 rounded-2xl text-xs font-black transition-all ${activeTab === 'daily' ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/20' : 'bg-slate-900 text-slate-50'}`}>修行定課</button>
         <button onClick={handleOpenWeeklyTab} className={`shrink-0 px-6 py-4 rounded-2xl text-xs font-black transition-all ${activeTab === 'weekly' ? 'bg-orange-600 text-white shadow-lg' : 'bg-slate-900 text-slate-50'}`}>加分副本</button>
         <button onClick={() => setActiveTab('shop')} className={`shrink-0 px-6 py-4 rounded-2xl text-xs font-black transition-all ${activeTab === 'shop' ? 'bg-yellow-600 text-white shadow-lg shadow-yellow-600/20' : 'bg-slate-900 text-slate-50'}`}>🏪藏寶閣</button>
         <button onClick={() => setActiveTab('rank')} className={`shrink-0 px-6 py-4 rounded-2xl text-xs font-black transition-all ${activeTab === 'rank' ? 'bg-orange-600 text-white shadow-lg' : 'bg-slate-900 text-slate-50'}`}>修為榜</button>
@@ -1132,9 +1132,9 @@ export default function App() {
 
       {view === 'app' && <HomeView />}
       {view === 'map' && userData && (
-        <>
+        <div className="fixed inset-0 z-10 flex flex-col">
           {/* 冒險狀態列：詛咒/天賦效果 + 黃金骰子 */}
-          <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between gap-2 px-4 py-2 bg-slate-950/90 backdrop-blur-sm border-b border-slate-800">
+          <div className="shrink-0 flex items-center justify-between gap-2 px-4 py-2 bg-slate-950/90 backdrop-blur-sm border-b border-slate-800">
             <span className={`text-[10px] font-black shrink-0 ${roleTrait?.isCursed ? 'text-red-400' : 'text-emerald-400'}`}>
               {roleTrait?.isCursed ? `☠️ ${roleTrait.curseName}` : '✨ 天命覺醒'}
             </span>
@@ -1143,6 +1143,7 @@ export default function App() {
             </p>
             <span className="text-[10px] font-black text-amber-400 shrink-0">⭐ {userData.GoldenDice}</span>
           </div>
+          <div className="flex-1 min-h-0">
           <WorldMap
           userData={userData}
           mapData={mapData}
@@ -1171,7 +1172,8 @@ dbEntities={mapEntities}
           }}
           onUpdateSteps={setStepsRemaining}
         />
-        </>
+          </div>
+        </div>
       )}
 
       {showGoldenDicePicker && (

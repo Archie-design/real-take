@@ -4,38 +4,17 @@ import { Quest, DailyLog } from '@/types';
 import { DAILY_QUEST_CONFIG } from '@/lib/constants';
 import { getLogicalDateStr } from '@/lib/utils/time';
 
-// Sprite sheet: 3×3 grid, each icon at (col%, row%)
-const QUEST_ICON_POS: Record<string, string> = {
-    q1: '100% 100%',
-    q2: '0% 100%',
-    q3: '100% 50%',
-    q4: '0% 0%',
-    q5: '50% 100%',
-    q6: '100% 0%',
-    q7: '0% 50%',
-    q8: '50% 0%',
-    q9: '50% 50%',
-};
-
 function QuestIcon({ questId, isDone }: { questId: string; isDone: boolean }) {
-    const pos = QUEST_ICON_POS[questId];
     if (isDone) {
         return (
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-xl shrink-0 bg-emerald-500 text-white">✓</div>
+            <div className="w-[72px] h-[72px] rounded-2xl flex items-center justify-center text-2xl shrink-0 bg-emerald-500 text-white">✓</div>
         );
     }
-    if (pos) {
-        return (
-            <div className="w-12 h-12 rounded-2xl shrink-0 bg-slate-800" style={{
-                backgroundImage: 'url(/quest-icons.png)',
-                backgroundSize: '300% 300%',
-                backgroundPosition: pos,
-                backgroundRepeat: 'no-repeat',
-            }} />
-        );
-    }
+    const baseId = questId === 'q1_dawn' ? 'q1' : questId;
     return (
-        <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-xl shrink-0 bg-slate-800 text-orange-500">✧</div>
+        <div className="w-[72px] h-[72px] rounded-2xl shrink-0 bg-slate-800 flex items-center justify-center">
+            <img src={`/images/quest-icons/${baseId}.png`} alt={questId} className="w-full h-full object-contain" />
+        </div>
     );
 }
 
