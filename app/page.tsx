@@ -51,6 +51,7 @@ const MessageBox = ({ message, onClose, type = 'info' }: { message: string, onCl
 export default function App() {
   const [view, setView] = useState<'login' | 'register' | 'app' | 'loading' | 'admin' | 'map'>('loading');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [lineBannerDismissed, setLineBannerDismissed] = useState(false);
   const [activeTab, setActiveTab] = useState<'daily' | 'weekly' | 'stats' | 'rank' | 'captain' | 'shop' | 'commandant'>('daily');
   type GmViewMode = 'all' | 'player' | 'captain' | 'commandant';
   const [gmViewMode, setGmViewMode] = useState<GmViewMode>('all');
@@ -670,7 +671,8 @@ export default function App() {
     const name = (fd.get('name') as string).trim();
     const phoneSuffix = (fd.get('phone') as string).trim();
     try {
-      const { data: allUsers } = await supabase.from('CharacterStats').select('*');
+      const { data: allUsers, error: queryError } = await supabase.from('CharacterStats').select('*');
+      if (queryError) throw new Error(queryError.message);
       const match = (allUsers as CharacterStats[])?.find(u => u.Name === name && u.UserID.endsWith(phoneSuffix));
       if (match) {
         sessionStorage.setItem('starry_session_uid', match.UserID);
@@ -841,6 +843,30 @@ export default function App() {
         } catch (_) { /* non-critical */ }
       };
 
+      // LINE OAuth session handoff — handle ?line_uid, ?line_bound, ?line_error params
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const lineUid = params.get('line_uid');
+        const lineBound = params.get('line_bound');
+        const lineError = params.get('line_error');
+        if (lineUid || lineBound || lineError) {
+          window.history.replaceState({}, '', '/');
+          if (lineUid) {
+            sessionStorage.setItem('starry_session_uid', decodeURIComponent(lineUid));
+          } else if (lineBound === 'success') {
+            setModalMessage({ text: '✅ LINE 帳號綁定成功！下次可直接以 LINE 登入。', type: 'success' });
+          } else if (lineError === 'not_bound') {
+            setModalMessage({ text: '此 LINE 帳號尚未綁定任何遊戲帳號，請先以姓名 + 手機末三碼登入後再進行綁定。', type: 'error' });
+          } else if (lineError === 'already_bound') {
+            setModalMessage({ text: '此 LINE 帳號已綁定其他玩家帳號。', type: 'error' });
+          } else if (lineError === 'cancelled') {
+            // User cancelled LINE auth — silent, no message
+          } else if (lineError) {
+            setModalMessage({ text: `LINE 登入發生錯誤（${lineError}），請稍後再試。`, type: 'error' });
+          }
+        }
+      }
+
       const savedUid = sessionStorage.getItem('starry_session_uid');
       if (savedUid && !userData) {
         // Fetch map entities only once on initial login (not on every userData change)
@@ -963,6 +989,26 @@ export default function App() {
     <div className="min-h-screen bg-slate-950 text-slate-200 pb-40 text-center animate-in fade-in">
       <Header userData={userData} onLogout={handleLogout} />
       <GmToolbar />
+
+      {/* LINE 綁定提示 Banner */}
+      {userData && !userData.LineUserId && !lineBannerDismissed && (
+        <div className="flex items-center gap-3 px-4 py-3 bg-[#06C755]/10 border-b border-[#06C755]/20 text-sm">
+          <span className="text-[#06C755] font-black shrink-0">LINE</span>
+          <span className="flex-1 text-left text-slate-300 text-xs">尚未綁定 LINE 帳號，綁定後可直接以 LINE 登入。</span>
+          <a
+            href={`/api/auth/line?action=bind&uid=${encodeURIComponent(userData.UserID)}`}
+            className="shrink-0 px-3 py-1 rounded-lg bg-[#06C755] text-white text-xs font-black active:scale-95 transition-all"
+          >
+            立即綁定
+          </a>
+          <button
+            onClick={() => setLineBannerDismissed(true)}
+            className="shrink-0 text-slate-600 hover:text-slate-400 text-lg leading-none"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       <nav className="sticky top-0 z-20 bg-slate-950/90 backdrop-blur-md flex p-4 gap-2 border-b border-white/5 shadow-xl overflow-x-auto no-scrollbar">
         <button onClick={() => setActiveTab('daily')} className={`shrink-0 px-6 py-4 rounded-2xl text-xs font-black transition-all ${activeTab === 'daily' ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/20' : 'bg-slate-900 text-slate-50'}`}>修行定課</button>

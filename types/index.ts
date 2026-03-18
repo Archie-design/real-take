@@ -35,6 +35,7 @@ export interface CharacterStats {
   Birthday?: string; // ISO date string YYYY-MM-DD
   IsCommandant?: boolean; // 大隊長
   IsGM?: boolean;         // GM 遊戲管理員
+  LineUserId?: string;    // LINE Login 綁定 ID
 }
 
 export interface Roster {
