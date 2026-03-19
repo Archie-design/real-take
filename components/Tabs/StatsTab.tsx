@@ -50,9 +50,15 @@ export function StatsTab({ userData, roleTrait }: StatsTabProps) {
 
                 <div className="bg-gradient-to-br from-red-950/40 to-slate-900 border-2 border-white/5 p-6 rounded-4xl shadow-2xl text-center flex flex-col items-center justify-center">
                     <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center mb-2 mx-auto"><Skull className="text-red-500" size={16} /></div>
-                    <span className="text-4xl font-black text-white mb-1">{userData.TotalFines}</span>
-                    <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em]">累世罰金餘額</p>
+                    <span className="text-4xl font-black text-white mb-1">
+                        {Math.max(0, (userData.TotalFines || 0) - (userData.FinePaid || 0))}
+                    </span>
+                    <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em]">罰金餘額</p>
+                    <p className="text-[9px] text-slate-600 mt-1">
+                        累計 NT${userData.TotalFines || 0}　已繳 NT${userData.FinePaid || 0}
+                    </p>
                 </div>
+
             </div>
 
             {/* Birthday card — read-only, set by admin via roster import */}

@@ -13,7 +13,11 @@
       "Bash(cp _tmp_a6.png a5.png)",
       "Bash(rm _tmp_a4.png _tmp_a5.png _tmp_a6.png)",
       "Bash(python3 -c \":*)",
-      "Bash(git -C /Users/keke/starry-westward-journey ls-files public/assets/)"
+      "Bash(git -C /Users/keke/starry-westward-journey ls-files public/assets/)",
+      "Bash(for f in /Users/keke/starry-westward-journey/supabase/migrations/*.sql)",
+      "Bash(do echo \"=== $f ===\")",
+      "Read(//Users/keke/starry-westward-journey/**)",
+      "Bash(done)"
     ]
   }
 }

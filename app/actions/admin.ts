@@ -153,31 +153,44 @@ export async function triggerWeeklySnapshot() {
     }
 }
 
-export async function checkWeeklyW3Compliance(weekMondayISO?: string) {
-    
+export async function checkWeeklyW3Compliance(startMondayISO?: string, endMondayISO?: string) {
+
     const client = await connectDb();
     try {
-        // Determine the week range (Monday 00:00 to Sunday 23:59:59)
+        // 計算雙週範圍：預設為「前兩週週一」至「本週週一」（共 14 天）
         let weekStart: Date;
-        if (weekMondayISO) {
-            weekStart = new Date(weekMondayISO);
-        } else {
-            weekStart = new Date();
-            const day = weekStart.getDay() || 7;
-            weekStart.setDate(weekStart.getDate() - (day - 1));
-            weekStart.setHours(0, 0, 0, 0);
-        }
-        const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekEnd.getDate() + 7);
+        let weekEnd: Date;
 
-        const weekLabel = weekStart.toISOString().slice(0, 10);
+        if (startMondayISO && endMondayISO) {
+            weekStart = new Date(startMondayISO);
+            // endMondayISO 是第二週的週一，加 7 天得週日結束
+            weekEnd = new Date(endMondayISO);
+            weekEnd.setDate(weekEnd.getDate() + 7);
+        } else {
+            // 預設：往回推 14 天（兩週前週一 → 本週週一）
+            const today = new Date();
+            const day = today.getDay() || 7;
+            const thisMonday = new Date(today);
+            thisMonday.setDate(today.getDate() - (day - 1));
+            thisMonday.setHours(0, 0, 0, 0);
+            weekStart = new Date(thisMonday);
+            weekStart.setDate(thisMonday.getDate() - 14);
+            weekEnd = new Date(thisMonday);
+        }
+
+        // period_label 類似 "2026-03-03~2026-03-10"（兩週起訖週一）
+        const isoW1 = weekStart.toISOString().slice(0, 10);
+        const w2Start = new Date(weekStart);
+        w2Start.setDate(w2Start.getDate() + 7);
+        const isoW2 = w2Start.toISOString().slice(0, 10);
+        const periodLabel = `${isoW1}~${isoW2}`;
 
         // Get all users
         const usersRes = await client.query<{ UserID: string; Name: string; TotalFines: number }>(
             `SELECT "UserID", "Name", "TotalFines" FROM "CharacterStats"`
         );
 
-        // Get all w3 logs in that week range
+        // Get all w3 logs in that bi-weekly range
         const logsRes = await client.query<{ UserID: string }>(
             `SELECT "UserID" FROM "DailyLogs"
              WHERE "QuestID" LIKE 'w3%'
@@ -201,14 +214,15 @@ export async function checkWeeklyW3Compliance(weekMondayISO?: string) {
         }
         await client.query('COMMIT');
 
-        await logAdminAction('w3_compliance', 'admin', undefined, weekLabel, {
+        await logAdminAction('w3_compliance', 'admin', undefined, periodLabel, {
             totalUsers: usersRes.rowCount || 0,
             violatorCount: violators.length,
             violators: violators.map(v => v.name),
+            periodLabel,
         });
         return {
             success: true,
-            weekLabel,
+            periodLabel,
             totalUsers: usersRes.rowCount || 0,
             violatorCount: violators.length,
             violators,
@@ -221,6 +235,7 @@ export async function checkWeeklyW3Compliance(weekMondayISO?: string) {
         await client.end();
     }
 }
+
 
 const ZH_NUMS = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十',
     '十一', '十二', '十三', '十四', '十五', '十六', '十七', '十八', '十九', '二十'];

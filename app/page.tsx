@@ -8,7 +8,7 @@ import {
   Dice5, Loader2, RotateCcw
 } from 'lucide-react';
 
-import { CharacterStats, DailyLog, Quest, SystemSettings, TopicHistory, TemporaryQuest, W4Application, AdminLog, Testimony } from '@/types';
+import { CharacterStats, DailyLog, Quest, SystemSettings, TopicHistory, TemporaryQuest, W4Application, AdminLog, Testimony, FinePaymentRecord } from '@/types';
 import { getLogicalDateStr, getWeeklyMonday } from '@/lib/utils/time';
 import { standardizePhone } from '@/lib/utils/phone';
 import { ROLE_CURE_MAP, DEFAULT_CONFIG, ADVENTURE_COST, ADMIN_PASSWORD, calculateLevelFromExp, ROLE_GROWTH_RATES } from '@/lib/constants';
@@ -32,6 +32,7 @@ import { drawWeeklyQuestForSquad, autoDrawAllSquads } from '@/app/actions/team';
 import { submitW4Application, reviewW4BySquadLeader, reviewW4ByAdmin, getW4Applications, getAdminActivityLog } from '@/app/actions/w4';
 import { generateWeeklyReview, generateCaptainBriefing } from '@/app/actions/gemini';
 import { handleChestOpen } from '@/app/actions/map';
+import { getSquadFineStatus, recordFinePayment, setPaidToCaptainDate, setSubmittedToOrgDate, getSquadFinePaymentHistory, checkSquadW3Compliance } from '@/app/actions/fines';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -90,6 +91,14 @@ export default function App() {
   const [squadApprovedW4Apps, setSquadApprovedW4Apps] = useState<W4Application[]>([]);
   const [adminLogs, setAdminLogs] = useState<AdminLog[]>([]);
   const [testimonies, setTestimonies] = useState<Testimony[]>([]);
+
+  // 罰款管理 state
+  interface SquadMemberFine { userId: string; name: string; totalFines: number; finePaid: number; balance: number; }
+  const [squadFineMembers, setSquadFineMembers] = useState<SquadMemberFine[]>([]);
+  const [fineHistory, setFineHistory] = useState<FinePaymentRecord[]>([]);
+  const [isLoadingFines, setIsLoadingFines] = useState(false);
+  const [isCheckingCompliance, setIsCheckingCompliance] = useState(false);
+  const [complianceResult, setComplianceResult] = useState<{ periodLabel: string; violators: { userId: string; name: string }[]; alreadyRun: boolean } | null>(null);
 
   const showCaptainTab = userData?.IsGM
     ? (gmViewMode === 'all' || gmViewMode === 'captain')
@@ -198,6 +207,32 @@ export default function App() {
     }
   };
 
+  const handleCaptainCheckW3Compliance = async () => {
+    if (!userData?.UserID) return;
+    setIsCheckingCompliance(true);
+    try {
+      const res = await checkSquadW3Compliance(userData.UserID);
+      if (res.success) {
+        setComplianceResult({
+          periodLabel: res.periodLabel ?? '',
+          violators: res.violators ?? [],
+          alreadyRun: res.alreadyRun ?? false,
+        });
+        // Refresh fine status to reflect updated TotalFines
+        if (!res.alreadyRun) {
+          const fineRes = await getSquadFineStatus(userData.UserID);
+          if (fineRes.success && fineRes.members) setSquadFineMembers(fineRes.members);
+        }
+      } else {
+        setModalMessage({ text: '結算失敗：' + res.error, type: 'error' });
+      }
+    } catch (e: any) {
+      setModalMessage({ text: '系統異常：' + e.message, type: 'error' });
+    } finally {
+      setIsCheckingCompliance(false);
+    }
+  };
+
   const handleDrawWeeklyQuest = async () => {
     if (!userData?.TeamName || !userData.IsCaptain) return;
     setIsSyncing(true);
@@ -233,6 +268,12 @@ export default function App() {
     }
   };
 
+  const handleOpenCaptainTab = () => {
+    setActiveTab('captain');
+    // 每次切回 captain tab 時重新載入罰款資料
+    if (userData?.IsCaptain || userData?.IsGM) loadFinesData();
+  };
+
   const handleGetAIBriefing = async () => {
     if (!userData?.UserID || !userData.IsCaptain) return;
     setIsLoadingBriefing(true);
@@ -265,6 +306,45 @@ export default function App() {
     } finally {
       setIsSyncing(false);
     }
+  };
+
+  // ── 罰款 handlers ──
+  const loadFinesData = async () => {
+    if (!userData?.TeamName) return;
+    setIsLoadingFines(true);
+    try {
+      const [summaryRes, histRes] = await Promise.all([
+        getSquadFineStatus(userData.UserID),
+        getSquadFinePaymentHistory(userData.UserID),
+      ]);
+      if (summaryRes.success && summaryRes.members) setSquadFineMembers(summaryRes.members as SquadMemberFine[]);
+      if (histRes.success && histRes.records) setFineHistory(histRes.records as FinePaymentRecord[]);
+    } catch (_) { /* silent */ } finally {
+      setIsLoadingFines(false);
+    }
+  };
+
+  const handleRecordFinePayment = async (targetUserId: string, amount: number, periodLabel: string, paidToCaptainAt?: string) => {
+    if (!userData?.TeamName) return;
+    const res = await recordFinePayment(userData.UserID, targetUserId, amount, periodLabel, paidToCaptainAt);
+    if (res.success) {
+      setModalMessage({ text: `已記錄繳款 NT$${amount}`, type: 'success' });
+      await loadFinesData();
+    } else {
+      setModalMessage({ text: res.error || '記錄失敗', type: 'error' });
+    }
+  };
+
+  const handleSetPaidToCaptainDate = async (paymentId: string, date: string) => {
+    const res = await setPaidToCaptainDate(userData?.UserID || '', paymentId, date);
+    if (res.success) await loadFinesData();
+    else setModalMessage({ text: res.error || '更新失敗', type: 'error' });
+  };
+
+  const handleSetSubmittedToOrgDate = async (paymentId: string, date: string) => {
+    const res = await setSubmittedToOrgDate(userData?.UserID || '', paymentId, date);
+    if (res.success) await loadFinesData();
+    else setModalMessage({ text: res.error || '更新失敗', type: 'error' });
   };
 
   const handleAutoDrawAllSquads = async () => {
@@ -1033,7 +1113,7 @@ export default function App() {
         <button onClick={() => setActiveTab('rank')} className={`shrink-0 px-6 py-4 rounded-2xl text-xs font-black transition-all ${activeTab === 'rank' ? 'bg-orange-600 text-white shadow-lg' : 'bg-slate-900 text-slate-50'}`}>修為榜</button>
         <button onClick={() => setActiveTab('stats')} className={`shrink-0 px-6 py-4 rounded-2xl text-xs font-black transition-all ${activeTab === 'stats' ? 'bg-orange-600 text-white shadow-lg' : 'bg-slate-900 text-slate-50'}`}>六維與罰金</button>
         {showCaptainTab && (
-          <button onClick={() => setActiveTab('captain')} className={`shrink-0 px-6 py-4 rounded-2xl text-xs font-black transition-all ${activeTab === 'captain' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'bg-slate-900 text-slate-50'}`}>👩‍✈️指揮所</button>
+          <button onClick={handleOpenCaptainTab} className={`shrink-0 px-6 py-4 rounded-2xl text-xs font-black transition-all ${activeTab === 'captain' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'bg-slate-900 text-slate-50'}`}>👩‍✈️指揮所</button>
         )}
         {showCommandantTab && (
           <button onClick={() => setActiveTab('commandant')} className={`shrink-0 px-6 py-4 rounded-2xl text-xs font-black transition-all ${activeTab === 'commandant' ? 'bg-rose-700 text-white shadow-lg shadow-rose-700/20' : 'bg-slate-900 text-slate-50'}`}>⚔️指揮部</button>
@@ -1089,6 +1169,15 @@ export default function App() {
             onGetAIBriefing={handleGetAIBriefing}
             aiBriefing={aiBriefing}
             isLoadingBriefing={isLoadingBriefing}
+            squadFineMembers={squadFineMembers}
+            fineHistory={fineHistory}
+            onRecordPayment={handleRecordFinePayment}
+            onSetPaidToCaptainDate={handleSetPaidToCaptainDate}
+            onSetSubmittedToOrgDate={handleSetSubmittedToOrgDate}
+            isLoadingFines={isLoadingFines}
+            onCheckW3Compliance={handleCaptainCheckW3Compliance}
+            isCheckingCompliance={isCheckingCompliance}
+            complianceResult={complianceResult}
           />
         )}
         {activeTab === 'commandant' && showCommandantTab && userData && (

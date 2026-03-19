@@ -1,7 +1,15 @@
 import { useState } from 'react';
-import { ShieldAlert, Dices, Loader2 } from 'lucide-react';
+import { ShieldAlert, Dices, Loader2, ChevronDown, ChevronUp, Banknote, CalendarCheck, CalendarClock } from 'lucide-react';
 import { DAILY_QUEST_CONFIG } from '@/lib/constants';
-import { TeamSettings, W4Application, CaptainBriefing } from '@/types';
+import { TeamSettings, W4Application, CaptainBriefing, FinePaymentRecord } from '@/types';
+
+interface SquadMemberFine {
+    userId: string;
+    name: string;
+    totalFines: number;
+    finePaid: number;
+    balance: number;
+}
 
 interface CaptainTabProps {
     teamName: string;
@@ -12,7 +20,19 @@ interface CaptainTabProps {
     onGetAIBriefing: () => Promise<void>;
     aiBriefing: CaptainBriefing | null;
     isLoadingBriefing: boolean;
+    // 罰款管理
+    squadFineMembers: SquadMemberFine[];
+    fineHistory: FinePaymentRecord[];
+    onRecordPayment: (targetUserId: string, amount: number, periodLabel: string, paidToCaptainAt?: string) => Promise<void>;
+    onSetPaidToCaptainDate: (paymentId: string, date: string) => Promise<void>;
+    onSetSubmittedToOrgDate: (paymentId: string, date: string) => Promise<void>;
+    isLoadingFines: boolean;
+    // w3 違規結算
+    onCheckW3Compliance: () => Promise<void>;
+    isCheckingCompliance: boolean;
+    complianceResult: { periodLabel: string; violators: { userId: string; name: string }[]; alreadyRun: boolean } | null;
 }
+
 
 function getCurrentWeekMondayStr(): string {
     const nowTaiwan = new Date(Date.now() + 8 * 3600 * 1000);
@@ -22,10 +42,35 @@ function getCurrentWeekMondayStr(): string {
     return monday.toISOString().slice(0, 10);
 }
 
-export function CaptainTab({ teamName, teamSettings, pendingW4Apps, onDrawWeeklyQuest, onReviewW4, onGetAIBriefing, aiBriefing, isLoadingBriefing }: CaptainTabProps) {
+export function CaptainTab({
+    teamName, teamSettings, pendingW4Apps, onDrawWeeklyQuest, onReviewW4,
+    onGetAIBriefing, aiBriefing, isLoadingBriefing,
+    squadFineMembers, fineHistory, onRecordPayment, onSetPaidToCaptainDate, onSetSubmittedToOrgDate, isLoadingFines,
+    onCheckW3Compliance, isCheckingCompliance, complianceResult,
+}: CaptainTabProps) {
     const [isDrawing, setIsDrawing] = useState(false);
     const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
     const [reviewingId, setReviewingId] = useState<string | null>(null);
+
+    // 罰款管理 state
+    const [paymentInput, setPaymentInput] = useState<Record<string, { amount: string; date: string }>>({});
+    const [recordingId, setRecordingId] = useState<string | null>(null);
+    const [historyOpen, setHistoryOpen] = useState(false);
+    const [updatingDateId, setUpdatingDateId] = useState<string | null>(null);
+    const [captainDateInputs, setCaptainDateInputs] = useState<Record<string, string>>({});
+    const [orgDateInputs, setOrgDateInputs] = useState<Record<string, string>>({});
+    const [periodLabel, setPeriodLabel] = useState(() => {
+        // 預設產生目前雙週週期標籤（台灣時間）
+        const nowTW = new Date(Date.now() + 8 * 3600 * 1000);
+        const day = nowTW.getUTCDay() || 7;
+        const thisMonday = new Date(nowTW);
+        thisMonday.setUTCDate(nowTW.getUTCDate() - (day - 1));
+        const prevMonday = new Date(thisMonday);
+        prevMonday.setUTCDate(thisMonday.getUTCDate() - 14);
+        const prevPrevMonday = new Date(thisMonday);
+        prevPrevMonday.setUTCDate(thisMonday.getUTCDate() - 7);
+        return `${prevMonday.toISOString().slice(0, 10)}~${prevPrevMonday.toISOString().slice(0, 10)}`;
+    });
 
     const weekMondayStr = getCurrentWeekMondayStr();
     const alreadyDrawnThisWeek = teamSettings?.mandatory_quest_week === weekMondayStr;
@@ -45,6 +90,32 @@ export function CaptainTab({ teamName, teamSettings, pendingW4Apps, onDrawWeekly
         await onReviewW4(appId, approve, reviewNotes[appId] || '');
         setReviewingId(null);
         setReviewNotes(prev => { const n = { ...prev }; delete n[appId]; return n; });
+    };
+
+    const handleRecordPayment = async (userId: string) => {
+        const input = paymentInput[userId];
+        const amount = parseInt(input?.amount || '0', 10);
+        if (!amount || amount <= 0) return;
+        setRecordingId(userId);
+        await onRecordPayment(userId, amount, periodLabel, input?.date || undefined);
+        setRecordingId(null);
+        setPaymentInput(prev => { const n = { ...prev }; delete n[userId]; return n; });
+    };
+
+    const handleSetCaptainDate = async (paymentId: string) => {
+        const date = captainDateInputs[paymentId];
+        if (!date) return;
+        setUpdatingDateId(paymentId + '_captain');
+        await onSetPaidToCaptainDate(paymentId, date);
+        setUpdatingDateId(null);
+    };
+
+    const handleSetOrgDate = async (paymentId: string) => {
+        const date = orgDateInputs[paymentId];
+        if (!date) return;
+        setUpdatingDateId(paymentId + '_org');
+        await onSetSubmittedToOrgDate(paymentId, date);
+        setUpdatingDateId(null);
     };
 
     return (
@@ -105,6 +176,190 @@ export function CaptainTab({ teamName, teamSettings, pendingW4Apps, onDrawWeekly
                             <p className="text-xs font-black text-indigo-400 uppercase tracking-widest mb-1">本週建議</p>
                             <p className="text-xs text-slate-300 leading-relaxed">{aiBriefing.suggestion}</p>
                         </div>
+                    </div>
+                )}
+            </section>
+
+            {/* ── 💸 罰款管理 ── */}
+            <section className="bg-slate-900 border-2 border-amber-500/30 p-8 rounded-4xl space-y-6 shadow-xl">
+                <h3 className="text-lg font-black text-white border-b border-white/10 pb-4 flex items-center gap-2">
+                    <Banknote size={18} className="text-amber-400" /> 罰款管理
+                </h3>
+
+                {/* w3 違規結算 */}
+                <div className="bg-slate-800/60 rounded-2xl p-4 space-y-3">
+                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">📋 上週 w3 違規結算</p>
+                    <button
+                        disabled={isCheckingCompliance || complianceResult?.alreadyRun === true}
+                        onClick={onCheckW3Compliance}
+                        className="w-full flex items-center justify-center gap-2 bg-red-800/60 hover:bg-red-700/70 text-white font-black text-sm py-3 rounded-xl transition-all active:scale-95 disabled:opacity-50"
+                    >
+                        {isCheckingCompliance
+                            ? <><Loader2 size={14} className="animate-spin" /> 結算中…</>
+                            : complianceResult?.alreadyRun
+                            ? `✅ 本週已結算（${complianceResult.periodLabel}）`
+                            : '計算上週 w3 違規'}
+                    </button>
+                    {complianceResult && !complianceResult.alreadyRun && (
+                        <p className="text-xs text-center animate-in slide-in-from-top-2 duration-300">
+                            {complianceResult.violators.length === 0
+                                ? <span className="text-emerald-400 font-black">🎉 上週全員達標！</span>
+                                : <span className="text-red-400 font-bold">
+                                    {complianceResult.violators.map(v => v.name).join('、')} 未完成 w3，各 +NT$200
+                                  </span>
+                            }
+                        </p>
+                    )}
+                </div>
+
+                {/* 週期標籤 */}
+                <div className="flex items-center gap-3">
+                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">結算週期</span>
+                    <input
+                        value={periodLabel}
+                        onChange={e => setPeriodLabel(e.target.value)}
+                        placeholder="2026-03-03~2026-03-10"
+                        className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-amber-500"
+                    />
+                </div>
+
+                {/* 成員罰款列表 */}
+                {isLoadingFines ? (
+                    <div className="flex justify-center py-6"><Loader2 size={20} className="animate-spin text-amber-400" /></div>
+                ) : squadFineMembers.length === 0 ? (
+                    <p className="text-sm text-slate-500 text-center py-4">小隊暫無罰款紀錄</p>
+                ) : (
+                    <div className="space-y-3">
+                        {squadFineMembers.map(m => (
+                            <div key={m.userId} className="bg-slate-800 rounded-2xl p-4 space-y-3">
+                                <div className="flex justify-between items-center">
+                                    <span className="font-black text-white">{m.name}</span>
+                                    <div className="flex gap-3 text-xs text-right">
+                                        <span className="text-slate-400">累計 <span className="text-red-400 font-black">NT${m.totalFines}</span></span>
+                                        <span className="text-slate-400">已繳 <span className="text-emerald-400 font-black">NT${m.finePaid}</span></span>
+                                        <span className={`font-black ${m.balance > 0 ? 'text-amber-400' : 'text-slate-500'}`}>
+                                            餘額 NT${m.balance}
+                                        </span>
+                                    </div>
+                                </div>
+                                {m.balance > 0 && (
+                                    <div className="flex gap-2 items-end">
+                                        <div className="flex-1 space-y-1.5">
+                                            <input
+                                                type="number"
+                                                placeholder="繳款金額 NT$"
+                                                value={paymentInput[m.userId]?.amount || ''}
+                                                onChange={e => setPaymentInput(prev => ({
+                                                    ...prev,
+                                                    [m.userId]: { ...prev[m.userId], amount: e.target.value },
+                                                }))}
+                                                min={1}
+                                                max={m.balance}
+                                                className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-amber-500"
+                                            />
+                                            <input
+                                                type="date"
+                                                title="隊員交款給小隊長的日期（選填）"
+                                                value={paymentInput[m.userId]?.date || ''}
+                                                onChange={e => setPaymentInput(prev => ({
+                                                    ...prev,
+                                                    [m.userId]: { ...prev[m.userId], date: e.target.value },
+                                                }))}
+                                                className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-amber-500"
+                                            />
+                                            <p className="text-[10px] text-slate-500">↑ 隊員交款日期（選填）</p>
+                                        </div>
+                                        <button
+                                            disabled={recordingId === m.userId || !paymentInput[m.userId]?.amount}
+                                            onClick={() => handleRecordPayment(m.userId)}
+                                            className="px-4 py-4 bg-amber-600 text-white font-black rounded-xl text-sm active:scale-95 transition-all disabled:opacity-40 whitespace-nowrap flex items-center gap-1.5"
+                                        >
+                                            {recordingId === m.userId
+                                                ? <Loader2 size={14} className="animate-spin" />
+                                                : <CalendarCheck size={14} />}
+                                            記錄
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* 歷史繳款紀錄 */}
+                {fineHistory.length > 0 && (
+                    <div className="space-y-3">
+                        <button
+                            onClick={() => setHistoryOpen(o => !o)}
+                            className="w-full flex items-center justify-between text-xs font-black text-slate-400 uppercase tracking-widest py-1"
+                        >
+                            <span>歷史繳款紀錄 ({fineHistory.length})</span>
+                            {historyOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        </button>
+
+                        {historyOpen && (
+                            <div className="space-y-3 animate-in slide-in-from-top-2 duration-300">
+                                {fineHistory.map(rec => (
+                                    <div key={rec.id} className="bg-slate-800/80 rounded-2xl p-4 space-y-3">
+                                        <div className="flex justify-between items-center">
+                                            <div>
+                                                <span className="font-black text-white text-sm">{rec.user_name}</span>
+                                                <span className="text-emerald-400 font-black text-sm ml-2">+NT${rec.amount}</span>
+                                            </div>
+                                            <span className="text-[10px] text-slate-500 bg-slate-700 px-2 py-1 rounded-lg">{rec.period_label}</span>
+                                        </div>
+
+                                        {/* 隊員→小隊長日期 */}
+                                        <div className="flex items-center gap-2">
+                                            <CalendarCheck size={13} className="text-blue-400 shrink-0" />
+                                            <span className="text-xs text-slate-400 whitespace-nowrap">隊員交款日：</span>
+                                            {rec.paid_to_captain_at
+                                                ? <span className="text-xs text-blue-300 font-bold">{rec.paid_to_captain_at}</span>
+                                                : <span className="text-xs text-slate-600">未記錄</span>
+                                            }
+                                            <input
+                                                type="date"
+                                                title="修改隊員交款日"
+                                                value={captainDateInputs[rec.id] || rec.paid_to_captain_at || ''}
+                                                onChange={e => setCaptainDateInputs(prev => ({ ...prev, [rec.id]: e.target.value }))}
+                                                className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-white text-xs outline-none focus:border-blue-500 ml-auto"
+                                            />
+                                            <button
+                                                disabled={updatingDateId === rec.id + '_captain'}
+                                                onClick={() => handleSetCaptainDate(rec.id)}
+                                                className="px-2 py-1 bg-blue-700/50 text-blue-300 rounded-lg text-xs font-black disabled:opacity-40 active:scale-95 transition-all"
+                                            >
+                                                {updatingDateId === rec.id + '_captain' ? <Loader2 size={10} className="animate-spin" /> : '✓'}
+                                            </button>
+                                        </div>
+
+                                        {/* 小隊長→大會日期 */}
+                                        <div className="flex items-center gap-2">
+                                            <CalendarClock size={13} className="text-amber-400 shrink-0" />
+                                            <span className="text-xs text-slate-400 whitespace-nowrap">上繳大會日：</span>
+                                            {rec.submitted_to_org_at
+                                                ? <span className="text-xs text-amber-300 font-bold">{rec.submitted_to_org_at}</span>
+                                                : <span className="text-xs text-slate-600">未記錄</span>
+                                            }
+                                            <input
+                                                type="date"
+                                                title="登錄上繳大會日期"
+                                                value={orgDateInputs[rec.id] || rec.submitted_to_org_at || ''}
+                                                onChange={e => setOrgDateInputs(prev => ({ ...prev, [rec.id]: e.target.value }))}
+                                                className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-white text-xs outline-none focus:border-amber-500 ml-auto"
+                                            />
+                                            <button
+                                                disabled={updatingDateId === rec.id + '_org'}
+                                                onClick={() => handleSetOrgDate(rec.id)}
+                                                className="px-2 py-1 bg-amber-700/50 text-amber-300 rounded-lg text-xs font-black disabled:opacity-40 active:scale-95 transition-all"
+                                            >
+                                                {updatingDateId === rec.id + '_org' ? <Loader2 size={10} className="animate-spin" /> : '✓'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
             </section>
