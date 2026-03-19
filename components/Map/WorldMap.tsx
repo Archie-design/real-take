@@ -157,6 +157,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const hudRef = useRef<HTMLDivElement>(null); // dice HUD ref — events from inside are ignored by map
     const statsHudRef = useRef<HTMLDivElement>(null); // stats HUD ref — tap-to-expand on mobile
+    const recenterBtnRef = useRef<HTMLButtonElement>(null); // recenter button — prevent tap from triggering hex move
     // Pinch-to-zoom state
     const isPinching = useRef(false);
     const pinchStartDist = useRef(0);
@@ -412,6 +413,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({
         const nativeTarget = ('touches' in e ? e.touches[0]?.target : (e as React.MouseEvent).target) as Node | null;
         if (nativeTarget && hudRef.current?.contains(nativeTarget)) return;
         if (nativeTarget && statsHudRef.current?.contains(nativeTarget)) return;
+        if (nativeTarget && recenterBtnRef.current?.contains(nativeTarget)) return;
         // Ignore synthetic mouse events that fire after touch (within 500ms)
         if (!isTouch && Date.now() - lastTouchTime.current < 500) return;
         if (isTouch) lastTouchTime.current = Date.now();
@@ -931,8 +933,13 @@ export const WorldMap: React.FC<WorldMapProps> = ({
                 {/* Recenter button — appears when player has panned away from character */}
                 {(Math.abs(camX + playerPixel.x) > 10 || Math.abs(camY + playerPixel.y) > 10) && (
                     <button
+                        ref={recenterBtnRef}
                         className="absolute top-[52px] md:bottom-6 md:top-auto left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-slate-900/90 border border-white/10 text-cyan-400 text-[11px] font-black shadow-xl backdrop-blur-xl active:scale-95 transition-all"
                         onClick={() => { setCamX(-playerPixel.x); setCamY(-playerPixel.y); }}
+                        onMouseDown={e => e.stopPropagation()}
+                        onMouseUp={e => e.stopPropagation()}
+                        onTouchStart={e => e.stopPropagation()}
+                        onTouchEnd={e => e.stopPropagation()}
                     >
                         <LocateFixed size={13} /> 回到角色
                     </button>
