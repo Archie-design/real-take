@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import QRCode from 'react-qr-code';
 import { registerForCourse } from '@/app/actions/course';
 import { COURSE_INFO } from '@/lib/courseConfig';
 
 const COURSE_KEY = 'class_b' as const;
 const INFO = COURSE_INFO[COURSE_KEY];
+const STORAGE_KEY = 'course_class_b_reg';
 
 export default function ClassBRegisterPage() {
     const [name, setName] = useState('');
@@ -15,6 +16,14 @@ export default function ClassBRegisterPage() {
     const [error, setError] = useState('');
     const [result, setResult] = useState<{ registrationId: string; userName: string } | null>(null);
 
+    // Restore from localStorage on mount
+    useEffect(() => {
+        try {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) setResult(JSON.parse(saved));
+        } catch { /* ignore */ }
+    }, []);
+
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
         setError('');
@@ -22,10 +31,19 @@ export default function ClassBRegisterPage() {
         const res = await registerForCourse(name, phone3, COURSE_KEY);
         setLoading(false);
         if (res.success) {
-            setResult({ registrationId: res.registrationId, userName: res.userName });
+            const data = { registrationId: res.registrationId, userName: res.userName };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            setResult(data);
         } else {
             setError(res.error);
         }
+    }
+
+    function handleReset() {
+        localStorage.removeItem(STORAGE_KEY);
+        setResult(null);
+        setName('');
+        setPhone3('');
     }
 
     return (
@@ -116,10 +134,10 @@ export default function ClassBRegisterPage() {
                             </p>
                         </div>
                         <button
-                            onClick={() => setResult(null)}
+                            onClick={handleReset}
                             className="text-xs text-slate-500 underline"
                         >
-                            重新查詢
+                            不是本人？重新查詢
                         </button>
                     </div>
                 )}
