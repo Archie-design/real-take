@@ -113,7 +113,7 @@ export default function App() {
     return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   };
 
-  const logicalTodayStr = useMemo(() => getLogicalDateStr(), []);
+  const logicalTodayStr = getLogicalDateStr();
   const currentWeeklyMonday = useMemo(() => getWeeklyMonday(), []);
 
 
