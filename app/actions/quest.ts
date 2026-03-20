@@ -30,14 +30,22 @@ export async function processCheckInTransaction(
         const userData = statsRes.rows[0];
         const logicalTodayStr = getLogicalDateStr();
 
+        // Helper: logical date expression in SQL (Taiwan timezone, before-noon counts as previous day)
+        // Matches the client-side getLogicalDateStr() logic.
+        const logicalDateExpr = `CASE
+            WHEN EXTRACT(HOUR FROM "Timestamp" AT TIME ZONE 'Asia/Taipei') >= 12
+            THEN (date("Timestamp" AT TIME ZONE 'Asia/Taipei'))::text
+            ELSE (date("Timestamp" AT TIME ZONE 'Asia/Taipei') - INTERVAL '1 day')::text
+          END`;
+
         // 2. Fetch daily logs to check if rewards are capped (only for 'q' quests)
         // First 3 q-quests give full rewards; 4th+ still record (for curse-breaking) but give 0 rewards.
         let rewardCapped = false;
         if (questId.startsWith('q')) {
             const logsRes = await client.query(
                 `SELECT COUNT(*) as count FROM "DailyLogs"
-         WHERE "UserID" = $1 AND "QuestID" LIKE 'q%' AND "Timestamp"::text LIKE $2`,
-                [userId, `${logicalTodayStr}%`]
+                 WHERE "UserID" = $1 AND "QuestID" LIKE 'q%' AND ${logicalDateExpr} = $2`,
+                [userId, logicalTodayStr]
             );
             const dailyCount = parseInt(logsRes.rows[0].count, 10);
             rewardCapped = dailyCount >= 3;
@@ -52,8 +60,9 @@ export async function processCheckInTransaction(
 
             const placeholders = q1Variants.map((_, i) => `$${i + 2}`).join(', ');
             const dupCheck = await client.query(
-                `SELECT COUNT(*) as count FROM "DailyLogs" WHERE "UserID" = $1 AND "QuestID" IN (${placeholders}) AND "Timestamp"::text LIKE $${q1Variants.length + 2}`,
-                [userId, ...q1Variants, `${logicalTodayStr}%`]
+                `SELECT COUNT(*) as count FROM "DailyLogs"
+                 WHERE "UserID" = $1 AND "QuestID" IN (${placeholders}) AND ${logicalDateExpr} = $${q1Variants.length + 2}`,
+                [userId, ...q1Variants, logicalTodayStr]
             );
             if (parseInt(dupCheck.rows[0].count, 10) > 0) {
                 throw new Error(
