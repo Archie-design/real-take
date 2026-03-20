@@ -25,6 +25,7 @@ import { CaptainTab } from '@/components/Tabs/CaptainTab';
 import { CommandantTab } from '@/components/Tabs/CommandantTab';
 import { ShopTab } from '@/components/Tabs/ShopTab';
 import { AchievementsTab } from '@/components/Tabs/AchievementsTab';
+import { AchievementIcon } from '@/components/AchievementIcon';
 import { ACHIEVEMENT_MAP, RARITY_STYLE, type AchievementDef } from '@/lib/achievements';
 import { getUserAchievements } from '@/app/actions/achievements';
 import { AdminDashboard } from '@/components/Admin/AdminDashboard';
@@ -1236,7 +1237,7 @@ export default function App() {
             <div className="w-full max-w-sm space-y-4 text-center">
               <p className="text-white font-black text-lg">✨ 成就解鎖！</p>
               <div className={`p-6 rounded-3xl border-2 ${style.border} ${style.bg} shadow-2xl shadow-[0_0_40px_rgba(0,0,0,0.5)]`}>
-                <div className="text-5xl mb-3">{def.icon}</div>
+                <div className="flex justify-center mb-3"><AchievementIcon def={def} size="lg" /></div>
                 <h3 className={`text-2xl font-black ${style.text}`}>{def.name}</h3>
                 <p className={`text-xs font-bold uppercase tracking-widest mt-1 ${style.text} opacity-70`}>{style.label}</p>
                 <p className="text-slate-300 text-sm mt-3 leading-relaxed">{def.description}</p>

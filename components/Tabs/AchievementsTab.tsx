@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ACHIEVEMENTS, ACHIEVEMENT_MAP, RARITY_STYLE, TOTAL_ACHIEVEMENTS, type AchievementDef } from '@/lib/achievements';
+import { AchievementIcon } from '@/components/AchievementIcon';
 import type { AchievementRecord, CharacterStats } from '@/types';
 
 interface AchievementsTabProps {
@@ -29,7 +30,7 @@ function AchievementCard({ def, unlocked_at, isOwner }: {
         return (
             <div className={`relative min-h-[100px] p-4 rounded-2xl border-2 ${style.border} ${style.bg} shadow-lg ${style.glow} flex flex-col gap-1`}>
                 <div className="flex items-center gap-2">
-                    <span className="text-2xl">{def.icon}</span>
+                    <AchievementIcon def={def} size="md" />
                     <span className={`font-black text-sm leading-tight ${style.text}`}>{def.name}</span>
                 </div>
                 <div className={`text-[10px] font-bold uppercase tracking-widest ${style.text} opacity-70`}>
