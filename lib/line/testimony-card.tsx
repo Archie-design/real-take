@@ -46,7 +46,7 @@ export async function generateTestimonyCard(params: TestimonyCardParams): Promis
                     {/* Top row: brand + date */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontSize: 26, color: '#d4a843', fontWeight: 900, letterSpacing: 1 }}>
-                            ⭐ 星光西遊・親證故事
+                            ⭐ 大無限開運西遊・親證故事
                         </span>
                         {date && <span style={{ fontSize: 22, color: '#6b7280' }}>{date}</span>}
                     </div>
@@ -121,7 +121,7 @@ export async function generateRawMessageCard(params: RawMessageCardParams): Prom
                     borderBottom: '1px solid #d0cfc9',
                 }}>
                     <span style={{ fontSize: 22, color: '#1a1a1a', fontWeight: 900 }}>
-                        星光西遊親證班
+                        大無限開運西遊親證班
                     </span>
                     <span style={{ fontSize: 18, color: '#888' }}>{today}</span>
                 </div>
@@ -158,7 +158,7 @@ export async function generateRawMessageCard(params: RawMessageCardParams): Prom
                     padding: '12px 0', background: '#deded8',
                 }}>
                     <span style={{ fontSize: 16, color: '#888' }}>
-                        ⭐ 星光西遊・親證存檔
+                        ⭐ 大無限開運西遊・親證存檔
                     </span>
                 </div>
             </div>

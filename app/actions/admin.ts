@@ -85,7 +85,7 @@ export async function triggerWeeklySnapshot() {
         `, [stateMsg]);
 
         // 7. Clear old global entities
-        await client.query(`DELETE FROM "MapEntities" WHERE owner_id IS NULL AND type != 'personal'`);
+        await client.query(`DELETE FROM "MapEntities" WHERE type NOT IN ('monster', 'chest', 'portal')`);
 
         // 8. Generate new procedural entities based on worldState
         const chanceChest = worldState === 'good' ? 0.05 : worldState === 'bad' ? 0.01 : 0.02;
@@ -125,15 +125,19 @@ export async function triggerWeeklySnapshot() {
                     `, [q, r]);
                     chestCount++;
                 } else if (rand < chanceChest + chanceMonster && monsterCount < MAX_MONSTERS) {
-                    // Level scales with axial distance from center (Lv1 near hub, Lv10 at edges)
+                    // Level scales with axial distance from center (Lv1 near hub, Lv20 at edges)
                     const dist = (Math.abs(q) + Math.abs(r) + Math.abs(-q - r)) / 2;
-                    const level = Math.min(10, Math.max(1, Math.floor(dist / 2)));
-                    const hp = 50 + level * 15;
+                    const level = Math.min(20, Math.max(1, Math.ceil(dist * 1.3)));
+                    const isElite = level >= 10 && Math.random() < 0.25;
+                    const hp = isElite ? Math.round((50 + level * 15) * 1.5) : 50 + level * 15;
                     const zoneId = getZoneId(q, r);
+                    const monsterName = isElite ? '精英妖獸' : '野生妖獸';
+                    const monsterIcon = isElite ? '👹' : '🐉';
+                    const monsterData = isElite ? { level, hp, zone: zoneId, type: 'elite' } : { level, hp, zone: zoneId };
                     await client.query(`
                         INSERT INTO "MapEntities" (q, r, type, name, icon, data)
-                        VALUES ($1, $2, 'monster', '野生妖獸', '🐉', $3)
-                    `, [q, r, JSON.stringify({ level, hp, zone: zoneId })]);
+                        VALUES ($1, $2, 'monster', $3, $4, $5)
+                    `, [q, r, monsterName, monsterIcon, JSON.stringify(monsterData)]);
                     monsterCount++;
                 }
             }

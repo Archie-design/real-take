@@ -41,8 +41,10 @@ export async function resolveCombat(params: CombatParams) {
 
     // 3. Monster Power
     const monsterLevel = monsterData.level || 1;
-    let monsterATK = monsterLevel * 12;
-    const monsterDEF = monsterLevel * 8;
+    // effectiveLevel tracks player level at 75% floor — ensures mid/late-game players still feel pressure
+    const effectiveLevel = Math.max(monsterLevel, Math.floor(attacker.Level * 0.75));
+    let monsterATK = effectiveLevel * 12;
+    const monsterDEF = effectiveLevel * 8;
     let monsterHP = monsterData.hp || 100;
 
     // 4. Combo Calculation (AP to Strikes)
@@ -110,7 +112,7 @@ export async function resolveCombat(params: CombatParams) {
     let rewardMsg = "";
     if (isVictory) {
         // Rewards Calculation (戰鬥不給經驗值，只給金幣與道具)
-        coinReward = Math.floor(monsterLevel * 20);
+        coinReward = Math.floor(effectiveLevel * 20);
         const diceRewardRoll = Math.random();
         const hasDiceReward = diceRewardRoll < 0.1; // 10% chance
         let baseDiceReward = hasDiceReward ? 1 : 0;
@@ -127,8 +129,18 @@ export async function resolveCombat(params: CombatParams) {
             isServerWideDrop = Math.random() < 0.05;
         }
 
-        totalDiceReward = baseDiceReward + demonDiceBonus;
-        goldenDiceReward = Math.random() < 0.02 ? 1 : 0;
+        // ── 精英怪特殊掉落 ──
+        const isElite = monsterData.type === 'elite';
+        let eliteDiceBonus = 0;
+        if (isElite) {
+            coinReward = Math.floor(coinReward * 2);     // 金幣 ×2
+            eliteDiceBonus = 2;                           // 保底 +2 能源骰子
+        }
+
+        totalDiceReward = baseDiceReward + demonDiceBonus + eliteDiceBonus;
+        goldenDiceReward = isElite
+            ? (Math.random() < 0.10 ? 1 : 0)  // 精英：10%
+            : (Math.random() < 0.02 ? 1 : 0); // 普通：2%
 
         // Individual Update
         const { error: rewardErr } = await supabase.rpc('add_combat_rewards', {
@@ -158,6 +170,7 @@ export async function resolveCombat(params: CombatParams) {
         rewardMsg = ` 獲得 ${coinReward} 金幣`;
         if (totalDiceReward > 0) rewardMsg += `, ${totalDiceReward} 能源骰子`;
         if (demonDiceBonus > 0) rewardMsg += ` (含心魔掉落 ${demonDiceBonus})`;
+        if (eliteDiceBonus > 0) rewardMsg += ` (含精英掉落 ${eliteDiceBonus})`;
         if (goldenDiceReward > 0) rewardMsg += `, 1 黃金骰子！`;
         rewardMsg += '。';
         if (isServerWideDrop) rewardMsg += " 🌟 觸發全服事件！所有冒險者各獲得 1 個能源骰子！";

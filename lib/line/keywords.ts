@@ -6,10 +6,10 @@ import { messagingApi } from '@line/bot-sdk';
 
 const MENU_TEMPLATE: messagingApi.TemplateMessage = {
     type: 'template',
-    altText: '星光西遊定課選單',
+    altText: '大無限開運西遊定課選單',
     template: {
         type: 'buttons',
-        title: '星光西遊小助手',
+        title: '大無限開運西遊小助手',
         text: '請選擇功能',
         actions: [
             { type: 'message', label: '參加定課', text: '/定課' },
@@ -23,7 +23,7 @@ const MENU_TEMPLATE: messagingApi.TemplateMessage = {
 const KEYWORD_MAP: Array<[string[], string]> = [
     [
         ['/幫助', '/說明', '/功能', '/help'],
-        `📖 星光西遊小助手 — 可用指令：
+        `📖 大無限開運西遊小助手 — 可用指令：
 
 🥊 定課打卡：輸入「/打卡」
 📋 定課介紹：輸入「/定課」
@@ -39,7 +39,7 @@ const KEYWORD_MAP: Array<[string[], string]> = [
         ['/打卡', '/如何打卡', '/定課打卡', '/怎麼打卡'],
         `🥊 每日定課打卡教學：
 
-1. 開啟星光西遊 App（或網頁版）
+1. 開啟大無限開運西遊 App（或網頁版）
 2. 點擊底部「修行定課」Tab
 3. 找到想完成的定課，點擊卡片即完成打卡
 4. 每日前 3 項定課獲得修為獎勵

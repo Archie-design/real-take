@@ -384,15 +384,7 @@ export default function App() {
 
     setIsSyncing(true);
     try {
-      if (entity.type === 'personal') {
-        // Consume in DB
-        if (entity.id) await supabase.from('MapEntities').delete().eq('id', entity.id);
-        const enc = entity.data;
-        setModalMessage({
-          text: `✨ 【${enc.encounterName}】\n\n${enc.narrative}\n\n「${enc.dialogue}」\n\n(修為影響：${enc.effect?.statToModify} ${enc.effect?.value > 0 ? '+' : ''}${enc.effect?.value})`,
-          type: enc.effect?.value >= 0 ? 'success' : 'error'
-        });
-      } else if (entity.type === 'portal') {
+      if (entity.type === 'portal') {
         if (entity.id) await supabase.from('MapEntities').delete().eq('id', entity.id);
         // Validation already happened in WorldMap.tsx
         setModalMessage({

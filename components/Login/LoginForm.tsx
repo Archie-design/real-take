@@ -20,8 +20,8 @@ export function LoginForm({ onLogin, onGoToRegister, onGoToAdmin, isSyncing }: L
     return (
         <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center px-6 py-10 space-y-8">
             <div className="animate-in zoom-in duration-700 text-center mx-auto">
-                <img src="/images/logo.png" alt="星光西遊" className="w-[min(18rem,60vw)] h-[min(18rem,60vw)] mx-auto mb-4 drop-shadow-2xl object-contain" />
-                <h1 className="text-5xl font-black text-white mb-2 uppercase tracking-widest text-center mx-auto">星光西遊</h1>
+                <img src="/images/logo.png" alt="大無限開運西遊" className="w-[min(18rem,60vw)] h-[min(18rem,60vw)] mx-auto mb-4 drop-shadow-2xl object-contain" />
+                <h1 className="text-5xl font-black text-white mb-2 uppercase tracking-widest text-center mx-auto">大無限開運西遊</h1>
                 <p className="text-orange-400 text-lg font-bold uppercase tracking-[0.4em] text-center mx-auto">修行者轉生入口</p>
             </div>
             <form onSubmit={onLogin} className="w-full max-w-sm space-y-6 mx-auto text-center">

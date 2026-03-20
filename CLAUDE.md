@@ -32,7 +32,7 @@ Requires `.env.local` with:
 
 ## Architecture
 
-**星光西遊** is a gamified check-in system for a real-life cultivation class (2026 大無限開運親證班). Players complete daily/weekly quests, move on a hex map, and engage in combat. Game design spec is in `docs/GAME_DESIGN.md` and `docs/MAP_DESIGN.md` — always treat these as the authoritative source of truth.
+**大無限開運西遊** is a gamified check-in system for a real-life cultivation class (2026 大無限開運親證班). Players complete daily/weekly quests, move on a hex map, and engage in combat. Game design spec is in `docs/GAME_DESIGN.md` and `docs/MAP_DESIGN.md` — always treat these as the authoritative source of truth.
 
 ### App Structure
 

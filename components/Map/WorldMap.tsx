@@ -3,6 +3,7 @@ import { ChevronLeft, MapIcon, Dice5, Loader2, Minus, Plus, Footprints, Package,
 import { CharacterStats, HexData } from '@/types';
 import { DEFAULT_CONFIG, TERRAIN_TYPES, ROLE_CURE_MAP, ZONES } from '@/lib/constants';
 import { getHexRegion, axialToPixelPos, getHexDist, pixelToAxial, getCombatMultiplier, getHexDirection, hexLineDraw } from '@/lib/utils/hex';
+import { getMonsterImageSrc } from '@/lib/utils/monster';
 import HexNode from '@/components/MapEditor/HexNode';
 import { GameInventoryModal } from '@/components/MapEditor/GameInventoryModal';
 import { WorldOverview } from '@/components/Map/WorldOverview';
@@ -284,7 +285,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({
     // Check Entity Collision after movement
     useEffect(() => {
         if (onEntityTrigger && !isCombatModalOpen) {
-            const allEntities = dbEntities.filter(e => e.is_active !== false && (e.type === 'monster' || !e.owner_id || e.owner_id === userData.UserID));
+            const allEntities = dbEntities.filter(e => e.is_active !== false && e.type !== 'personal');
 
             // 1. Proactive Interception: Check for monsters in adjacent hexes (dist === 1)
             const currentPosKey = `${userData.CurrentQ},${userData.CurrentR}`;
@@ -526,7 +527,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({
                             let actualCost = finalCost;
 
                             const path = hexLineDraw({ q: userData.CurrentQ, r: userData.CurrentR }, { q: targetQ, r: targetR });
-                            const allEntitiesForCollision = [...dbEntities.filter(e => e.is_active !== false && (e.type === 'monster' || !e.owner_id || e.owner_id === userData.UserID))];
+                            const allEntitiesForCollision = [...dbEntities.filter(e => e.is_active !== false && e.type !== 'personal')];
 
                             for (let i = 1; i < path.length; i++) {
                                 const step = path[i];
@@ -685,15 +686,20 @@ export const WorldMap: React.FC<WorldMapProps> = ({
 
                         {/* 2.5 Entities Layer (Monsters, Chests, Encounters) */}
                         <g style={{ pointerEvents: 'none' }}>
-                            {dbEntities.filter(e => (e.type === 'monster' || !e.owner_id || e.owner_id === userData.UserID) && getHexDist(initialQ, initialR, e.q, e.r) <= 20).map((e) => {
+                            {dbEntities.filter(e => e.type !== 'personal' && getHexDist(initialQ, initialR, e.q, e.r) <= 20).map((e) => {
                                 const pos = axialToPixelPos(e.q, e.r, DEFAULT_CONFIG.HEX_SIZE_WORLD);
-                                if (e.type === 'personal') {
+                                if (e.type === 'monster') {
+                                    const imgSrc = getMonsterImageSrc(e.data?.type, e.data?.zone);
+                                    const W = 16, H = 16;
                                     return (
-                                        <g key={`db_ent_${e.id}`} transform={`translate(${pos.x}, ${pos.y})`}>
-                                            <circle r={12} fill="indigo" className="animate-ping opacity-50" />
-                                            <circle r={8} fill="magenta" />
-                                            <text y={4} textAnchor="middle" fontSize={14} className="drop-shadow-lg">{e.icon}</text>
-                                        </g>
+                                        <image
+                                            key={`db_ent_${e.id}`}
+                                            href={imgSrc ?? ''}
+                                            x={pos.x - W / 2} y={pos.y - H}
+                                            width={W} height={H}
+                                            preserveAspectRatio="xMidYMax meet"
+                                            style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.9))' }}
+                                        />
                                     );
                                 }
                                 return (

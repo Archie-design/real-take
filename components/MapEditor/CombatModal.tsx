@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
+import Image from 'next/image';
 import { Swords, Shield, Heart, Zap, AlertTriangle, Info } from 'lucide-react';
 import { CharacterStats } from '@/types';
 import { ROLE_CURE_MAP } from '@/lib/constants';
+import { getMonsterImageSrc } from '@/lib/utils/monster';
 
 interface CombatModalProps {
     isOpen: boolean;
@@ -18,6 +20,8 @@ interface CombatModalProps {
 export function CombatModal({
     isOpen, onClose, player, targetEntity, flankingMultiplier, remainingAP, isObscured, onAttack, isProcessing
 }: CombatModalProps) {
+    const [imageError, setImageError] = useState(false);
+
     if (!isOpen || !targetEntity) return null;
 
     // Player Stats Calculation
@@ -35,6 +39,7 @@ export function CombatModal({
     const monsterLevel = targetEntity.data?.level || 1;
     const monsterName = targetEntity.name || "未知妖物";
     const monsterIcon = targetEntity.icon || "🐉";
+    const monsterImageSrc = getMonsterImageSrc(targetEntity.data?.type, targetEntity.data?.zone);
     const monsterATK = monsterLevel * 12;
     const monsterDEF = monsterLevel * 8;
     const monsterHP = targetEntity.data?.hp || 100;
@@ -93,7 +98,15 @@ export function CombatModal({
 
                     {/* Player Side */}
                     <div className="flex-1 p-4 md:p-6 flex flex-col items-center">
-                        <div className="text-4xl md:text-5xl drop-shadow-lg mb-2 md:mb-4">{roleConfig?.avatar || '👤'}</div>
+                        <div className="w-28 h-28 md:w-36 md:h-36 mb-2 md:mb-4 relative drop-shadow-[0_0_15px_rgba(52,211,153,0.2)]">
+                            <Image
+                                src={`/images/map-sprites/${player.Role}.png`}
+                                alt={player.Role}
+                                fill
+                                className="object-contain"
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                            />
+                        </div>
                         <h3 className="text-lg font-black text-emerald-400">{player.Name} (Lv.{player.Level})</h3>
                         <div className="w-full mt-4 space-y-2 md:space-y-3">
                             <div className="flex justify-between items-center bg-slate-950 p-3 rounded-xl border border-white/5">
@@ -125,7 +138,19 @@ export function CombatModal({
 
                     {/* Target Side */}
                     <div className="flex-1 p-4 md:p-6 flex flex-col items-center">
-                        <div className="text-4xl md:text-5xl drop-shadow-lg mb-2 md:mb-4 filter drop-shadow-[0_0_15px_rgba(239,68,68,0.3)]">{monsterIcon}</div>
+                        {monsterImageSrc && !imageError ? (
+                            <div className="w-28 h-28 md:w-36 md:h-36 mb-2 md:mb-4 relative drop-shadow-[0_0_15px_rgba(239,68,68,0.3)]">
+                                <Image
+                                    src={monsterImageSrc}
+                                    alt={monsterName}
+                                    fill
+                                    className="object-contain"
+                                    onError={() => setImageError(true)}
+                                />
+                            </div>
+                        ) : (
+                            <div className="text-4xl md:text-5xl drop-shadow-lg mb-2 md:mb-4 filter drop-shadow-[0_0_15px_rgba(239,68,68,0.3)]">{monsterIcon}</div>
+                        )}
                         <h3 className="text-lg font-black text-red-400">{monsterName} {isObscured ? '' : `(Lv.${monsterLevel})`}</h3>
                         <div className="w-full mt-4 space-y-2 md:space-y-3 relative">
                             {isObscured && (

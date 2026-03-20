@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "星光西遊",
+  title: "大無限開運西遊",
   description: "修行者轉生入口 — 2026 大無限開運親證班",
 };
 

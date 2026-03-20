@@ -93,7 +93,7 @@ export async function GET(req: NextRequest) {
         const { richMenuId } = await client.createRichMenu({
             size: { width: W, height: H },
             selected: true,
-            name: '星光西遊定課選單',
+            name: '大無限開運西遊定課選單',
             chatBarText: '定課選單',
             areas: [
                 { bounds: { x: 0,    y: 0,   width: 1250, height: 421 }, action: { type: 'message', text: '定課' } },

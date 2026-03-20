@@ -142,7 +142,7 @@ export default function ClassCRegisterPage() {
                     </div>
                 )}
 
-                <p className="text-center text-[10px] text-slate-600">星光西遊・修行打卡系統</p>
+                <p className="text-center text-[10px] text-slate-600">大無限開運西遊・修行打卡系統</p>
             </div>
         </main>
     );

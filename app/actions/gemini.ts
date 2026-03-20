@@ -91,7 +91,7 @@ export async function generateWeeklyReview(
         const thisWeekMondayStr = thisWeekMonday.toLocaleDateString('zh-TW', { month: 'long', day: 'numeric' });
 
         const prompt = `
-你是《星光西遊》的「洞天福地覆盤官」。這款遊戲鼓勵玩家藉由現實生活的習慣養成來獲得修為成長。
+你是《大無限開運西遊》的「洞天福地覆盤官」。這款遊戲鼓勵玩家藉由現實生活的習慣養成來獲得修為成長。
 每週一，你需要為每位修行者撰寫一份「修行週報」，回顧他們上週的定課完成情況，並給予有溫度的鼓勵或棒喝。
 
 【修行者資訊】
@@ -236,7 +236,7 @@ export async function generateCaptainBriefing(
             teamAvgRate > 0.7 ? 'high' : teamAvgRate >= 0.4 ? 'medium' : 'low';
 
         const prompt = `
-你是《星光西遊》的「洞天軍情分析師」，專為小隊隊長提供隊務報告。
+你是《大無限開運西遊》的「洞天軍情分析師」，專為小隊隊長提供隊務報告。
 請根據以下資料，對小隊過去 7 天的修行表現進行分析，並給予隊長具體可行的建議。
 
 【小隊資訊】
