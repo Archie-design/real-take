@@ -1137,6 +1137,7 @@ export default function App() {
             logs={logs}
             logicalTodayStr={logicalTodayStr}
             userInventory={typeof userData?.Inventory === 'string' ? JSON.parse(userData.Inventory) : (userData?.Inventory || [])}
+            teamInventory={typeof teamSettings?.inventory === 'string' ? JSON.parse(teamSettings.inventory) : (teamSettings?.inventory || [])}
             onCheckIn={handleCheckInAction}
             onUndo={setUndoTarget}
             formatCheckInTime={formatCheckInTime}
@@ -1150,6 +1151,7 @@ export default function App() {
             isTopicDone={isTopicDone}
             temporaryQuests={temporaryQuests.filter(t => t.active)}
             userInventory={typeof userData?.Inventory === 'string' ? JSON.parse(userData.Inventory) : (userData?.Inventory || [])}
+            teamInventory={typeof teamSettings?.inventory === 'string' ? JSON.parse(teamSettings.inventory) : (teamSettings?.inventory || [])}
             w4Applications={w4Applications}
             weeklyReview={weeklyReview}
             isLoadingReview={isLoadingReview}

@@ -24,6 +24,7 @@ interface DailyQuestsTabProps {
     logs: DailyLog[];
     logicalTodayStr: string;
     userInventory: string[];
+    teamInventory?: string[];
     onCheckIn: (q: Quest) => void;
     onUndo: (q: Quest) => void;
     formatCheckInTime: (timestamp: string) => string;
@@ -38,10 +39,10 @@ function CurseBreakBadge() {
     );
 }
 
-function Q1Card({ q, isDone, questLog, isDawn, setIsDawn, hasMirror, activeMandatoryId, isCapped, onCheckIn, onUndo, formatCheckInTime }: {
+function Q1Card({ q, isDone, questLog, isDawn, setIsDawn, hasMirror, activeMandatoryId, isCapped, punchMultiplier, onCheckIn, onUndo, formatCheckInTime }: {
     q: Quest; isDone: boolean; questLog?: DailyLog; isDawn: boolean;
     setIsDawn: (v: boolean) => void; hasMirror: boolean; activeMandatoryId: string;
-    isCapped: boolean;
+    isCapped: boolean; punchMultiplier: number;
     onCheckIn: (q: Quest) => void; onUndo: (q: Quest) => void;
     formatCheckInTime: (timestamp: string) => string;
 }) {
@@ -60,6 +61,9 @@ function Q1Card({ q, isDone, questLog, isDawn, setIsDawn, hasMirror, activeManda
             : q.id === activeMandatoryId
                 ? 'bg-slate-900 border-red-600 shadow-[0_0_15px_rgba(220,38,38,0.2)]'
                 : 'bg-slate-900 border-white/5';
+    const baseExp = Math.ceil(q.reward * punchMultiplier);
+    const dawnExp = baseExp + (hasMirror ? 150 : 0);
+    const displayExp = isDawn ? dawnExp : baseExp;
     return (
         <div className={`relative w-full p-6 rounded-3xl border-2 transition-all ${borderClass}`}>
             <button onClick={handleCheckIn} className="flex items-center gap-4 w-full text-left">
@@ -70,8 +74,8 @@ function Q1Card({ q, isDone, questLog, isDawn, setIsDawn, hasMirror, activeManda
                 </div>
                 {!isDone && isCapped ? <CurseBreakBadge /> : (
                     <div className="text-right">
-                        <div className="font-black text-orange-500">{isDawn && hasMirror ? '+350' : `+${q.reward}`} 修為</div>
-                        <div className="text-xs font-bold text-yellow-400 mt-0.5">+{isDawn && hasMirror ? 35 : Math.floor(q.reward * 0.1)} 🪙</div>
+                        <div className="font-black text-orange-500">+{displayExp} 修為</div>
+                        <div className="text-xs font-bold text-yellow-400 mt-0.5">+{Math.floor(q.reward * 0.1)} 🪙</div>
                     </div>
                 )}
             </button>
@@ -94,10 +98,16 @@ function Q1Card({ q, isDone, questLog, isDawn, setIsDawn, hasMirror, activeManda
     );
 }
 
-export function DailyQuestsTab({ weeklyQuestId, logs, logicalTodayStr, userInventory, onCheckIn, onUndo, formatCheckInTime }: DailyQuestsTabProps) {
+export function DailyQuestsTab({ weeklyQuestId, logs, logicalTodayStr, userInventory, teamInventory = [], onCheckIn, onUndo, formatCheckInTime }: DailyQuestsTabProps) {
     const [isDawnMode, setIsDawnMode] = useState(false);
     const hasMirror = userInventory.includes('a2');
     const weeklyQuestName = DAILY_QUEST_CONFIG.find(q => q.id === weeklyQuestId)?.title;
+
+    // 計算修為乘數（與 quest.ts 伺服器邏輯一致）
+    const hasA1 = userInventory.includes('a1');
+    const hasA5 = userInventory.includes('a5');
+    const baseMultiplier = hasA1 ? 1.2 : (hasA5 ? 1.2 : 1);           // a1/a5：個人所有 q 定課 ×1.2
+    const punchMultiplier = baseMultiplier * (teamInventory.includes('a3') ? 1.5 : 1); // a3：打拳額外 ×1.5
     const todayQCount = logs.filter(l => l.QuestID.startsWith('q') && getLogicalDateStr(l.Timestamp) === logicalTodayStr).length;
     const isCapped = todayQCount >= 3;
 
@@ -131,6 +141,7 @@ export function DailyQuestsTab({ weeklyQuestId, logs, logicalTodayStr, userInven
                             hasMirror={hasMirror}
                             activeMandatoryId={weeklyQuestId || ''}
                             isCapped={isCapped}
+                            punchMultiplier={punchMultiplier}
                             onCheckIn={onCheckIn}
                             onUndo={onUndo}
                             formatCheckInTime={formatCheckInTime}
@@ -154,7 +165,7 @@ export function DailyQuestsTab({ weeklyQuestId, logs, logicalTodayStr, userInven
                         <div className="flex-1 text-left"><h3 className={`font-black text-lg ${isDone ? 'text-emerald-400' : 'text-white'}`}>{q.title}</h3><p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">{q.sub}</p></div>
                         {!isDone && isCapped ? <CurseBreakBadge /> : (
                             <div className="text-right">
-                                <div className="font-black text-orange-500">+{q.reward} 修為</div>
+                                <div className="font-black text-orange-500">+{Math.ceil(q.reward * baseMultiplier)} 修為</div>
                                 <div className="text-xs font-bold text-yellow-400 mt-0.5">+{Math.floor(q.reward * 0.1)} 🪙</div>
                             </div>
                         )}

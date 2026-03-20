@@ -10,6 +10,7 @@ interface WeeklyTopicTabProps {
     isTopicDone: boolean;
     temporaryQuests: TemporaryQuest[];
     userInventory: string[];
+    teamInventory?: string[];
     w4Applications: W4Application[];
     weeklyReview: WeeklyReview | null;
     isLoadingReview: boolean;
@@ -25,7 +26,10 @@ const W4_STATUS_LABELS: Record<string, { label: string; color: string }> = {
     rejected: { label: '🔴 已駁回', color: 'text-red-400' },
 };
 
-export function WeeklyTopicTab({ systemSettings, logs, currentWeeklyMonday, isTopicDone, temporaryQuests, userInventory, w4Applications, weeklyReview, isLoadingReview, onCheckIn, onUndo, onSubmitW4 }: WeeklyTopicTabProps) {
+export function WeeklyTopicTab({ systemSettings, logs, currentWeeklyMonday, isTopicDone, temporaryQuests, userInventory, teamInventory = [], w4Applications, weeklyReview, isLoadingReview, onCheckIn, onUndo, onSubmitW4 }: WeeklyTopicTabProps) {
+    // a4 (幌金繩)：t 開頭定課 ×1.5（與 quest.ts 伺服器邏輯一致）
+    const topicExp = Math.ceil(1000 * (teamInventory.includes('a4') ? 1.5 : 1));
+
     const [showW4Form, setShowW4Form] = useState(false);
     const [w4Target, setW4Target] = useState('');
     const [w4Date, setW4Date] = useState(getLogicalDateStr(new Date()));
@@ -84,7 +88,7 @@ export function WeeklyTopicTab({ systemSettings, logs, currentWeeklyMonday, isTo
                         <p className="text-sm text-yellow-400 font-bold mt-1 italic">「{systemSettings.TopicQuestTitle}」</p>
                     </div>
                     <div className="text-right bg-yellow-500/10 px-3 py-2 rounded-xl">
-                        <div className="text-sm font-black text-yellow-500">+1000 修為</div>
+                        <div className="text-sm font-black text-yellow-500">+{topicExp} 修為</div>
                         <div className="text-xs font-bold text-yellow-400">+100 🪙</div>
                     </div>
                 </div>
