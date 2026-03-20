@@ -218,3 +218,10 @@ export interface AchievementRecord {
   achievement_id: string;
   unlocked_at: string;
 }
+
+export interface CourseRegistration {
+  id: string;
+  user_id: string;
+  course_key: string;
+  registered_at: string;
+}

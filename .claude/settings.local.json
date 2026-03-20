@@ -20,7 +20,8 @@
       "Bash(done)",
       "Bash(npm run lint)",
       "Bash(grep -v \"^--$\")",
-      "Bash(grep -A5 \"achievements.ts$\")"
+      "Bash(grep -A5 \"achievements.ts$\")",
+      "Bash(grep -h \"^CREATE TABLE\\\\|^ALTER TABLE\" /Users/keke/starry-westward-journey/supabase/migrations/*.sql)"
     ]
   }
 }

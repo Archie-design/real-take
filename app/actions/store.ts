@@ -11,6 +11,15 @@ export async function purchaseArtifact(userId: string, artifactId: string, teamN
     try {
         await client.query('BEGIN');
 
+        // 法寶購買需完成課後課（2026/6/23）報到
+        const attendanceRes = await client.query(
+            `SELECT id FROM "CourseAttendance" WHERE user_id = $1 AND course_key = 'class_b' LIMIT 1`,
+            [userId]
+        );
+        if ((attendanceRes.rowCount ?? 0) === 0) {
+            throw new Error('法寶商店需完成課後課（2026/6/23）報到後才可解鎖，請於課後課當天掃碼報到');
+        }
+
         if (config.isTeamBinding) {
             if (!teamName) {
                 throw new Error("此為團隊專屬法寶，因您尚未加入任何隊伍，無法購買。");
