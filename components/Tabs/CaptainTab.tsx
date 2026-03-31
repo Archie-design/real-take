@@ -538,7 +538,7 @@ export function CaptainTab({
 
             {/* 📋 聯誼會報名審核 */}
             <section className="bg-slate-900 border-2 border-blue-500/30 p-8 rounded-4xl space-y-6 shadow-xl">
-                <h3 className="text-lg font-black text-white border-b border-white/10 pb-4">📋 聯誼會報名審核（小隊長初審）</h3>
+                <h3 className="text-lg font-black text-white border-b border-white/10 pb-4">📋 聯誼會報名審核（小隊長審核）</h3>
 
                 {(() => {
                     const b5b6Apps = pendingBonusApps.filter(a => a.quest_id === 'b5' || a.quest_id === 'b6');
