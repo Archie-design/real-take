@@ -1,15 +1,15 @@
 'use server';
 
 import { createClient } from '@supabase/supabase-js';
-import { W4Application } from '@/types';
+import { BonusApplication } from '@/types';
 import { processCheckInTransaction } from '@/app/actions/quest';
 import { logAdminAction } from '@/app/actions/admin';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-// ── 隊員：提交電影推廣申請 ─────────────────────────────────────
-export async function submitW4Application(
+// ── 隊員：提交電影推廣申請（訪談 w4 系列）─────────────────────────────────────
+export async function submitInterviewApplication(
     userId: string,
     userName: string,
     squadName: string | null,
@@ -24,7 +24,7 @@ export async function submitW4Application(
 
     // 防止對同一對象在同一天重複提交（同一天可以電影推廣多人，但同一對象不能重複）
     const { data: existing } = await supabase
-        .from('W4Applications')
+        .from('BonusApplications')
         .select('id, status')
         .eq('user_id', userId)
         .eq('interview_date', interviewDate)
@@ -37,7 +37,7 @@ export async function submitW4Application(
     }
 
     const { data, error } = await supabase
-        .from('W4Applications')
+        .from('BonusApplications')
         .insert({
             user_id: userId,
             user_name: userName,
@@ -53,11 +53,22 @@ export async function submitW4Application(
         .single();
 
     if (error) return { success: false, error: '提交失敗：' + error.message };
-    return { success: true, application: data as W4Application };
+    return { success: true, application: data as BonusApplication };
 }
 
+// ── b3–b7 獎勵對照表 ─────────────────────────────────────
+const BONUS_QUEST_CONFIG: Record<string, { reward: number; title: string }> = {
+    b3: { reward: 5000, title: '續報高階/五運班加分' },
+    b4: { reward: 5000, title: '成為小天使加分' },
+    b5: { reward: 3000, title: '報名聯誼會（1年）加分' },
+    b6: { reward: 5000, title: '報名聯誼會（2年）加分' },
+    b7: { reward: 1000, title: '參加實體課程加分' },
+};
+
 // ── 劇組長：初審 ─────────────────────────────────────────
-export async function reviewW4BySquadLeader(
+// b5/b6（聯誼會）：初審通過後直接入帳，不需大隊長終審
+// w4（電影推廣訪談）：初審通過後進入大隊長終審佇列
+export async function reviewBonusBySquadLeader(
     appId: string,
     reviewerId: string,
     approve: boolean,
@@ -75,8 +86,8 @@ export async function reviewW4BySquadLeader(
     if (!reviewer?.IsCaptain) return { success: false, error: '僅限劇組長進行初審' };
 
     const { data: app } = await supabase
-        .from('W4Applications')
-        .select('squad_name, status')
+        .from('BonusApplications')
+        .select('*')
         .eq('id', appId)
         .single();
 
@@ -84,10 +95,69 @@ export async function reviewW4BySquadLeader(
     if (app.status !== 'pending') return { success: false, error: '此申請已被審核，無法重複操作' };
     if (app.squad_name !== reviewer.TeamName) return { success: false, error: '只能審核本劇組的申請' };
 
+    if (!approve) {
+        const { error } = await supabase
+            .from('BonusApplications')
+            .update({
+                status: 'rejected',
+                squad_review_by: reviewerId,
+                squad_review_at: new Date().toISOString(),
+                squad_review_notes: notes,
+            })
+            .eq('id', appId);
+
+        if (error) return { success: false, error: '審核更新失敗：' + error.message };
+        return { success: true, newStatus: 'rejected' };
+    }
+
+    // b5/b6 聯誼會：小隊長初審即最終核准，直接入帳
+    const isNetworkingEvent = app.quest_id === 'b5' || app.quest_id === 'b6';
+
+    if (isNetworkingEvent) {
+        const bonusInfo = BONUS_QUEST_CONFIG[app.quest_id];
+
+        const { error: updateErr } = await supabase
+            .from('BonusApplications')
+            .update({
+                status: 'approved',
+                squad_review_by: reviewerId,
+                squad_review_at: new Date().toISOString(),
+                squad_review_notes: notes,
+                final_review_by: reviewer.Name,
+                final_review_at: new Date().toISOString(),
+            })
+            .eq('id', appId);
+
+        if (updateErr) return { success: false, error: '審核更新失敗：' + updateErr.message };
+
+        const checkInRes = await processCheckInTransaction(
+            app.user_id,
+            app.quest_id,
+            bonusInfo.title,
+            bonusInfo.reward
+        );
+
+        if (!checkInRes.success) {
+            await logAdminAction('b5b6_squad_approve', reviewer.Name, appId, app.user_name, {
+                questId: app.quest_id,
+                checkInError: checkInRes.error,
+            }, 'error');
+            return { success: true, warning: '審核已核准，但入帳失敗：' + checkInRes.error };
+        }
+
+        await logAdminAction('b5b6_squad_approve', reviewer.Name, appId, app.user_name, {
+            questId: app.quest_id,
+            reward: bonusInfo.reward,
+        });
+
+        return { success: true, newStatus: 'approved' };
+    }
+
+    // 其他類型（w4 電影推廣訪談）：進入大隊長終審佇列
     const { error } = await supabase
-        .from('W4Applications')
+        .from('BonusApplications')
         .update({
-            status: approve ? 'squad_approved' : 'rejected',
+            status: 'squad_approved',
             squad_review_by: reviewerId,
             squad_review_at: new Date().toISOString(),
             squad_review_notes: notes,
@@ -95,20 +165,11 @@ export async function reviewW4BySquadLeader(
         .eq('id', appId);
 
     if (error) return { success: false, error: '審核更新失敗：' + error.message };
-    return { success: true, newStatus: approve ? 'squad_approved' : 'rejected' };
+    return { success: true, newStatus: 'squad_approved' };
 }
 
-// ── b3–b7 獎勵對照表 ─────────────────────────────────────
-const BONUS_QUEST_CONFIG: Record<string, { reward: number; title: string }> = {
-    b3: { reward: 5000, title: '續報高階/五運班加分' },
-    b4: { reward: 5000, title: '成為小天使加分' },
-    b5: { reward: 3000, title: '報名聯誼會（1年）加分' },
-    b6: { reward: 5000, title: '報名聯誼會（2年）加分' },
-    b7: { reward: 1000, title: '參加實體課程加分' },
-};
-
-// ── 管理員：終審 ──────────────────────────────────────────
-export async function reviewW4ByAdmin(
+// ── 大隊長：終審（僅用於 w4 電影推廣訪談）──────────────────────────────────────
+export async function reviewBonusByAdmin(
     appId: string,
     action: 'approve' | 'reject',
     notes: string = '',
@@ -117,7 +178,7 @@ export async function reviewW4ByAdmin(
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { data: app } = await supabase
-        .from('W4Applications')
+        .from('BonusApplications')
         .select('*')
         .eq('id', appId)
         .single();
@@ -128,7 +189,7 @@ export async function reviewW4ByAdmin(
     const newStatus = action === 'approve' ? 'approved' : 'rejected';
 
     const { error: updateErr } = await supabase
-        .from('W4Applications')
+        .from('BonusApplications')
         .update({
             status: newStatus,
             final_review_by: reviewerName,
@@ -140,12 +201,10 @@ export async function reviewW4ByAdmin(
     if (updateErr) return { success: false, error: '終審更新失敗：' + updateErr.message };
 
     if (action === 'approve') {
-        // 依 quest_id 前綴判斷獎勵（b3–b7 有各自金額；w4 傳愛系統預設 1000）
         const questIdBase = app.quest_id.split('|')[0];
         const bonusInfo = BONUS_QUEST_CONFIG[questIdBase];
         const reward = bonusInfo ? bonusInfo.reward : 1000;
         const rewardTitle = bonusInfo ? bonusInfo.title : '星光電影推廣獎勵';
-        const dice = bonusInfo ? 0 : 1;
 
         const checkInRes = await processCheckInTransaction(
             app.user_id,
@@ -154,20 +213,20 @@ export async function reviewW4ByAdmin(
             reward
         );
         if (!checkInRes.success) {
-            await logAdminAction('w4_final_approve', reviewerName, appId, app.user_name, {
+            await logAdminAction('bonus_final_approve', reviewerName, appId, app.user_name, {
                 interviewTarget: app.interview_target,
                 questId: app.quest_id,
                 checkInError: checkInRes.error,
             }, 'error');
             return { success: true, warning: '審核已核准，但入帳失敗：' + checkInRes.error };
         }
-        await logAdminAction('w4_final_approve', reviewerName, appId, app.user_name, {
+        await logAdminAction('bonus_final_approve', reviewerName, appId, app.user_name, {
             interviewTarget: app.interview_target,
             questId: app.quest_id,
             reward,
         });
     } else {
-        await logAdminAction('w4_final_reject', reviewerName, appId, app.user_name, {
+        await logAdminAction('bonus_final_reject', reviewerName, appId, app.user_name, {
             interviewTarget: app.interview_target,
             notes,
         });
@@ -175,9 +234,6 @@ export async function reviewW4ByAdmin(
 
     return { success: true, newStatus };
 }
-
-// ── 上傳申請截圖（客戶端函數） ──────────────────────────────────────────
-// 注意：這個函數應該在客戶端 (use client) 中調用
 
 // ── 學員：提交 b3–b7 加分申請 ──────────────────────────────
 export async function submitBonusApplication(
@@ -196,7 +252,7 @@ export async function submitBonusApplication(
     // b3、b4、b5、b6 每人只能申請一次（未被駁回的情況下）
     if (['b3', 'b4', 'b5', 'b6'].includes(bonusType)) {
         const { data: existing } = await supabase
-            .from('W4Applications')
+            .from('BonusApplications')
             .select('id, status')
             .eq('user_id', userId)
             .eq('quest_id', bonusType)
@@ -211,11 +267,11 @@ export async function submitBonusApplication(
     // b7 每次課程日期不同，quest_id 帶日期以允許多次申請
     const questId = bonusType === 'b7' ? `b7|${date}` : bonusType;
 
-    // b5、b6 需要上傳截圖，送往小隊長初審；其他則直接進入管理員終審
+    // b5、b6 需要截圖，送小隊長初審；其他直接進入大隊長終審
     const status = (bonusType === 'b5' || bonusType === 'b6') ? 'pending' : 'squad_approved';
 
     const { data, error } = await supabase
-        .from('W4Applications')
+        .from('BonusApplications')
         .insert({
             user_id: userId,
             user_name: userName,
@@ -232,17 +288,17 @@ export async function submitBonusApplication(
         .single();
 
     if (error) return { success: false, error: '提交失敗：' + error.message };
-    return { success: true, application: data as W4Application };
+    return { success: true, application: data as BonusApplication };
 }
 
 // ── 查詢申請列表 ──────────────────────────────────────────
-export async function getW4Applications(filter: {
+export async function getBonusApplications(filter: {
     userId?: string;
     squadName?: string;
     status?: string;
 } = {}) {
     const supabase = createClient(supabaseUrl, supabaseKey);
-    let query = supabase.from('W4Applications').select('*').order('created_at', { ascending: false });
+    let query = supabase.from('BonusApplications').select('*').order('created_at', { ascending: false });
 
     if (filter.userId) query = query.eq('user_id', filter.userId);
     if (filter.squadName) query = query.eq('squad_name', filter.squadName);
@@ -250,7 +306,7 @@ export async function getW4Applications(filter: {
 
     const { data, error } = await query;
     if (error) return { success: false, error: error.message, applications: [] };
-    return { success: true, applications: (data || []) as W4Application[] };
+    return { success: true, applications: (data || []) as BonusApplication[] };
 }
 
 // ── 查詢管理操作日誌 ──────────────────────────────────────

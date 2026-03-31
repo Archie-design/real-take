@@ -9,7 +9,7 @@ import {
   CalendarDays, Clapperboard, Video
 } from 'lucide-react';
 
-import { CharacterStats, DailyLog, Quest, SystemSettings, TopicHistory, TemporaryQuest, W4Application, AdminLog, Testimony, FinePaymentRecord, AngelCallPairingsData } from '@/types';
+import { CharacterStats, DailyLog, Quest, SystemSettings, TopicHistory, TemporaryQuest, BonusApplication, AdminLog, Testimony, FinePaymentRecord, AngelCallPairingsData } from '@/types';
 import { getLogicalDateStr, getWeeklyMonday } from '@/lib/utils/time';
 import { standardizePhone } from '@/lib/utils/phone';
 import { ADMIN_PASSWORD, calculateLevelFromExp } from '@/lib/constants';
@@ -29,7 +29,7 @@ import { processCheckInTransaction, clearTodayLogs } from '@/app/actions/quest';
 import { importRostersData, autoAssignSquadsForTesting, logAdminAction, runAngelCallPairing } from '@/app/actions/admin';
 import { getTestimonies } from '@/app/actions/testimonies_admin';
 import { drawWeeklyQuestForSquad, autoDrawAllSquads } from '@/app/actions/team';
-import { submitW4Application, reviewW4BySquadLeader, reviewW4ByAdmin, getW4Applications, getAdminActivityLog, submitBonusApplication } from '@/app/actions/w4';
+import { submitInterviewApplication, reviewBonusBySquadLeader, reviewBonusByAdmin, getBonusApplications, getAdminActivityLog, submitBonusApplication } from '@/app/actions/bonus';
 import { getSquadFineStatus, recordFinePayment, setPaidToCaptainDate, getSquadFinePaymentHistory, checkSquadFineCompliance, recordOrgSubmission, getSquadOrgSubmissions, getLastComplianceRun } from '@/app/actions/fines';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
@@ -68,10 +68,10 @@ export default function App() {
   const [teamSettings, setTeamSettings] = useState<any>(null);
   const [teamMemberCount, setTeamMemberCount] = useState<number>(1);
 
-  const [w4Applications, setW4Applications] = useState<W4Application[]>([]);
-  const [pendingW4Apps, setPendingW4Apps] = useState<W4Application[]>([]);
+  const [myBonusApps, setMyBonusApps] = useState<BonusApplication[]>([]);
+  const [pendingBonusApps, setPendingBonusApps] = useState<BonusApplication[]>([]);
 
-  const [squadApprovedW4Apps, setSquadApprovedW4Apps] = useState<W4Application[]>([]);
+  const [pendingFinalReviewApps, setPendingFinalReviewApps] = useState<BonusApplication[]>([]);
   const [adminLogs, setAdminLogs] = useState<AdminLog[]>([]);
   const [testimonies, setTestimonies] = useState<Testimony[]>([]);
 
@@ -117,10 +117,10 @@ export default function App() {
       setAdminAuth(true);
       // Fetch admin data on auth
       const [w4Res, logsRes] = await Promise.all([
-        getW4Applications({ status: 'squad_approved' }),
+        getBonusApplications({ status: 'squad_approved' }),
         getAdminActivityLog(30),
       ]);
-      if (w4Res.success) setSquadApprovedW4Apps(w4Res.applications);
+      if (w4Res.success) setPendingFinalReviewApps(w4Res.applications);
       if (logsRes.success) setAdminLogs(logsRes.logs as AdminLog[]);
       // Load angel call pairings from SystemSettings
       const { data: pairingsSetting } = await supabase
@@ -157,22 +157,26 @@ export default function App() {
     bonusType: 'b3' | 'b4' | 'b5' | 'b6' | 'b7',
     target: string,
     date: string,
-    desc: string
+    desc: string,
+    screenshotUrl?: string
   ) => {
     if (!userData) return;
     const res = await submitBonusApplication(
       userData.UserID, userData.Name,
       userData.TeamName || null, userData.SquadName || null,
-      bonusType, target, date, desc
+      bonusType, target, date, desc, screenshotUrl
     );
     if (res.success && res.application) {
-      setW4Applications(prev => [res.application as W4Application, ...prev]);
-      // Also refresh squadApprovedW4Apps so admin sees it
-      if (adminAuth) {
-        const w4Res = await getW4Applications({ status: 'squad_approved' });
-        if (w4Res.success) setSquadApprovedW4Apps(w4Res.applications);
+      setMyBonusApps(prev => [res.application as BonusApplication, ...prev]);
+      if (userData.IsCaptain && userData.TeamName) {
+        const pendingRes = await getBonusApplications({ squadName: userData.TeamName, status: 'pending' });
+        if (pendingRes.success) setPendingBonusApps(pendingRes.applications);
       }
-      setModalMessage({ text: '加分申請已提交，待管理員審核。', type: 'success' });
+      if (adminAuth) {
+        const finalRes = await getBonusApplications({ status: 'squad_approved' });
+        if (finalRes.success) setPendingFinalReviewApps(finalRes.applications);
+      }
+      setModalMessage({ text: '加分申請已提交，待小隊長審核。', type: 'success' });
     } else {
       setModalMessage({ text: res.error || '提交失敗', type: 'error' });
     }
@@ -403,38 +407,45 @@ export default function App() {
     }
   };
 
-  const handleSubmitW4 = async (data: { interviewTarget: string; interviewDate: string; description: string }) => {
+  const handleSubmitInterview = async (data: { interviewTarget: string; interviewDate: string; description: string }) => {
     if (!userData) return;
-    const res = await submitW4Application(
+    const res = await submitInterviewApplication(
       userData.UserID, userData.Name,
       userData.TeamName || null, userData.SquadName || null,
       data.interviewTarget, data.interviewDate, data.description
     );
     if (res.success && res.application) {
-      setW4Applications(prev => [res.application as W4Application, ...prev]);
+      setMyBonusApps(prev => [res.application as BonusApplication, ...prev]);
+      if (userData.IsCaptain && userData.TeamName) {
+        const pendingRes = await getBonusApplications({ squadName: userData.TeamName, status: 'pending' });
+        if (pendingRes.success) setPendingBonusApps(pendingRes.applications);
+      }
       setModalMessage({ text: '電影推廣申請已提交，待劇組長審核。', type: 'success' });
     } else {
       setModalMessage({ text: res.error || '提交失敗', type: 'error' });
     }
   };
 
-  const handleReviewW4BySquad = async (appId: string, approve: boolean, notes: string) => {
+  const handleReviewBonusBySquad = async (appId: string, approve: boolean, notes: string) => {
     if (!userData) return;
-    const res = await reviewW4BySquadLeader(appId, userData.UserID, approve, notes);
+    const res = await reviewBonusBySquadLeader(appId, userData.UserID, approve, notes);
     if (res.success) {
-      setPendingW4Apps(prev => prev.filter(a => a.id !== appId));
+      setPendingBonusApps(prev => prev.filter(a => a.id !== appId));
+      if (approve) {
+        const finalRes = await getBonusApplications({ status: 'squad_approved' });
+        if (finalRes.success) setPendingFinalReviewApps(finalRes.applications);
+      }
       setModalMessage({ text: approve ? '初審通過！' : '已駁回申請。', type: approve ? 'success' : 'info' });
     } else {
       setModalMessage({ text: res.error || '審核失敗', type: 'error' });
     }
   };
 
-  const handleFinalReviewW4 = async (appId: string, approve: boolean, notes: string) => {
-    const res = await reviewW4ByAdmin(appId, approve ? 'approve' : 'reject', notes);
+  const handleFinalReviewBonus = async (appId: string, approve: boolean, notes: string) => {
+    const res = await reviewBonusByAdmin(appId, approve ? 'approve' : 'reject', notes);
     if (res.success) {
-      setSquadApprovedW4Apps(prev => prev.filter(a => a.id !== appId));
+      setPendingFinalReviewApps(prev => prev.filter(a => a.id !== appId));
       setModalMessage({ text: approve ? '已核准入帳！票房已發放。' : '已駁回申請。', type: approve ? 'success' : 'info' });
-      // Refresh admin logs
       const logsRes = await getAdminActivityLog(30);
       if (logsRes.success) setAdminLogs(logsRes.logs as AdminLog[]);
     } else {
@@ -665,15 +676,15 @@ export default function App() {
               }
               setUserData(stats as CharacterStats);
               setLogs(logsArray);
-              const w4Res = await getW4Applications({ userId: stats.UserID });
-              if (w4Res.success) setW4Applications(w4Res.applications);
+              const w4Res = await getBonusApplications({ userId: stats.UserID });
+              if (w4Res.success) setMyBonusApps(w4Res.applications);
               if (stats.IsCaptain && stats.TeamName) {
-                const pendingRes = await getW4Applications({ squadName: stats.TeamName, status: 'pending' });
-                if (pendingRes.success) setPendingW4Apps(pendingRes.applications);
+                const pendingRes = await getBonusApplications({ squadName: stats.TeamName, status: 'pending' });
+                if (pendingRes.success) setPendingBonusApps(pendingRes.applications);
               }
               if (stats.IsCommandant) {
-                const commandantRes = await getW4Applications({ status: 'squad_approved' });
-                if (commandantRes.success) setSquadApprovedW4Apps(commandantRes.applications);
+                const commandantRes = await getBonusApplications({ status: 'squad_approved' });
+                if (commandantRes.success) setPendingFinalReviewApps(commandantRes.applications);
               }
               setView('app');
             } else {
@@ -713,8 +724,8 @@ export default function App() {
   // Refresh w4 applications whenever the weekly tab becomes active
   useEffect(() => {
     if (activeTab === 'weekly' && userData?.UserID) {
-      getW4Applications({ userId: userData.UserID }).then(res => {
-        if (res.success) setW4Applications(res.applications);
+      getBonusApplications({ userId: userData.UserID }).then(res => {
+        if (res.success) setMyBonusApps(res.applications);
       });
     }
   }, [activeTab, userData?.UserID]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -847,8 +858,9 @@ export default function App() {
             formatCheckInTime={formatCheckInTime}
           />
         )}
-        {activeTab === 'weekly' && (
+        {activeTab === 'weekly' && userData && (
           <WeeklyTopicTab
+            userId={userData.UserID}
             systemSettings={systemSettings}
             fineSettings={systemSettings?.FineSettings}
             logicalTodayStr={logicalTodayStr}
@@ -856,10 +868,10 @@ export default function App() {
             currentWeeklyMonday={currentWeeklyMonday}
             isTopicDone={isTopicDone}
             temporaryQuests={temporaryQuests.filter(t => t.active)}
-            w4Applications={w4Applications}
+            bonusApplications={myBonusApps}
             onCheckIn={handleCheckInAction}
             onUndo={setUndoTarget}
-            onSubmitW4={handleSubmitW4}
+            onSubmitInterview={handleSubmitInterview}
             onSubmitBonusApp={handleSubmitBonusApp}
           />
         )}
@@ -869,9 +881,9 @@ export default function App() {
           <CaptainTab
             teamName={userData.TeamName || '未編組'}
             teamSettings={teamSettings}
-            pendingW4Apps={pendingW4Apps}
+            pendingBonusApps={pendingBonusApps}
             onDrawWeeklyQuest={handleDrawWeeklyQuest}
-            onReviewW4={handleReviewW4BySquad}
+            onReviewBonus={handleReviewBonusBySquad}
             squadFineMembers={squadFineMembers}
             fineHistory={fineHistory}
             onRecordPayment={handleRecordFinePayment}
@@ -887,10 +899,10 @@ export default function App() {
         {activeTab === 'commandant' && showCommandantTab && userData && (
           <CommandantTab
             userData={userData}
-            apps={squadApprovedW4Apps}
+            apps={pendingFinalReviewApps}
             onRefresh={async () => {
-              const res = await getW4Applications({ status: 'squad_approved' });
-              if (res.success) setSquadApprovedW4Apps(res.applications);
+              const res = await getBonusApplications({ status: 'squad_approved' });
+              if (res.success) setPendingFinalReviewApps(res.applications);
             }}
             onShowMessage={(msg, type) => setModalMessage({ text: msg, type })}
           />
@@ -941,7 +953,7 @@ export default function App() {
           leaderboard={leaderboard}
           topicHistory={topicHistory}
           temporaryQuests={temporaryQuests}
-          squadApprovedW4Apps={squadApprovedW4Apps}
+          pendingFinalReviewApps={pendingFinalReviewApps}
           adminLogs={adminLogs}
           testimonies={testimonies}
           angelCallPairings={angelCallPairings}
@@ -951,7 +963,7 @@ export default function App() {
           onAutoDrawAllSquads={handleAutoDrawAllSquads}
           onRunAngelCallPairing={handleRunAngelCallPairing}
           onImportRoster={handleImportRoster}
-          onFinalReviewW4={handleFinalReviewW4}
+          onFinalReviewBonus={handleFinalReviewBonus}
           onClose={() => setView('login')}
         />
       )}

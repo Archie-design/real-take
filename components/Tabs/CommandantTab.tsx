@@ -2,12 +2,12 @@
 
 import React, { useState } from 'react';
 import { CheckCircle2, XCircle, RefreshCw, Sword } from 'lucide-react';
-import { CharacterStats, W4Application } from '@/types';
-import { reviewW4ByAdmin } from '@/app/actions/w4';
+import { CharacterStats, BonusApplication } from '@/types';
+import { reviewBonusByAdmin } from '@/app/actions/bonus';
 
 interface CommandantTabProps {
     userData: CharacterStats;
-    apps: W4Application[];
+    apps: BonusApplication[];
     onRefresh: () => void;
     onShowMessage: (msg: string, type: 'success' | 'error' | 'info') => void;
 }
@@ -19,7 +19,7 @@ export function CommandantTab({ userData, apps, onRefresh, onShowMessage }: Comm
     const handleReview = async (appId: string, action: 'approve' | 'reject') => {
         setReviewingId(appId);
         try {
-            const res = await reviewW4ByAdmin(appId, action, notes[appId] || '', userData.Name);
+            const res = await reviewBonusByAdmin(appId, action, notes[appId] || '', userData.Name);
             if (res.success) {
                 onShowMessage(
                     action === 'approve' ? '✅ 已核准入帳，電影推廣票房已發放！' : '已駁回此申請。',

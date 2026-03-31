@@ -83,16 +83,16 @@ export interface SystemSettings {
   FineSettings?: FineSettings;
 }
 
-export interface W4Application {
+export interface BonusApplication {
   id: string;
   user_id: string;
   user_name: string;
   squad_name?: string;
   battalion_name?: string;
-  interview_target: string;
-  interview_date: string;
+  interview_target: string;   // 訪談對象（w4）或報名項目描述（b3-b7）
+  interview_date: string;     // YYYY-MM-DD
   description?: string;
-  quest_id: string;
+  quest_id: string;           // 'w4|date|target' 或 'b3'/'b4'/'b5'/'b6'/'b7|date'
   status: 'pending' | 'squad_approved' | 'approved' | 'rejected';
   squad_review_by?: string;
   squad_review_at?: string;
@@ -100,8 +100,12 @@ export interface W4Application {
   final_review_by?: string;
   final_review_at?: string;
   final_review_notes?: string;
+  screenshot_url?: string;    // b5/b6 聯誼會截圖憑證
   created_at?: string;
 }
+
+/** @deprecated 請改用 BonusApplication */
+export type W4Application = BonusApplication;
 
 export interface AdminLog {
   id: string;

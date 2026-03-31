@@ -1,6 +1,6 @@
 import React from 'react';
 import { Settings, X, BarChart3, Save, Users, Lock, QrCode, AlertTriangle, Clapperboard } from 'lucide-react';
-import { SystemSettings, CharacterStats, TopicHistory, TemporaryQuest, W4Application, AdminLog, Testimony, AngelCallPairingsData } from '@/types';
+import { SystemSettings, CharacterStats, TopicHistory, TemporaryQuest, BonusApplication, AdminLog, Testimony, AngelCallPairingsData } from '@/types';
 
 import { ADMIN_PASSWORD, DAILY_QUEST_CONFIG, WEEKLY_QUEST_CONFIG } from '@/lib/constants';
 
@@ -79,7 +79,7 @@ interface AdminDashboardProps {
     leaderboard: CharacterStats[];
     topicHistory: TopicHistory[];
     temporaryQuests: TemporaryQuest[];
-    squadApprovedW4Apps: W4Application[];
+    pendingFinalReviewApps: BonusApplication[];
     adminLogs: AdminLog[];
     testimonies: Testimony[];
     angelCallPairings: AngelCallPairingsData | null;
@@ -89,19 +89,19 @@ interface AdminDashboardProps {
     onAutoDrawAllSquads: () => void;
     onRunAngelCallPairing: () => Promise<void>;
     onImportRoster: (csvData: string) => Promise<void>;
-    onFinalReviewW4: (appId: string, approve: boolean, notes: string) => Promise<void>;
+    onFinalReviewBonus: (appId: string, approve: boolean, notes: string) => Promise<void>;
     onClose: () => void;
 }
 
 export function AdminDashboard({
     adminAuth, onAuth, systemSettings, updateGlobalSetting,
     leaderboard, topicHistory, temporaryQuests,
-    squadApprovedW4Apps, adminLogs, testimonies,
+    pendingFinalReviewApps, adminLogs, testimonies,
     angelCallPairings,
     onAddTempQuest, onToggleTempQuest, onDeleteTempQuest,
     onAutoDrawAllSquads,
     onRunAngelCallPairing,
-    onImportRoster, onFinalReviewW4, onClose
+    onImportRoster, onFinalReviewBonus, onClose
 }: AdminDashboardProps) {
     const [csvInput, setCsvInput] = React.useState("");
     const [isImporting, setIsImporting] = React.useState(false);
@@ -134,7 +134,7 @@ export function AdminDashboard({
 
     const handleW4Review = async (appId: string, approve: boolean) => {
         setReviewingW4Id(appId);
-        await onFinalReviewW4(appId, approve, w4Notes[appId] || '');
+        await onFinalReviewBonus(appId, approve, w4Notes[appId] || '');
         setReviewingW4Id(null);
         setW4Notes(prev => { const n = { ...prev }; delete n[appId]; return n; });
     };
@@ -453,10 +453,10 @@ export function AdminDashboard({
                 <section className="space-y-6">
                     <div className="flex items-center gap-2 text-pink-500 font-black text-sm uppercase tracking-widest">❤️ 待終審申請（傳愛 & 加分任務）</div>
                     <div className="bg-slate-900 border-2 border-pink-500/20 p-8 rounded-4xl shadow-xl space-y-4">
-                        {squadApprovedW4Apps.length === 0 ? (
+                        {pendingFinalReviewApps.length === 0 ? (
                             <p className="text-sm text-slate-500 text-center py-4">目前無待終審申請</p>
                         ) : (
-                            squadApprovedW4Apps.map(app => {
+                            pendingFinalReviewApps.map(app => {
                                 const questBase = app.quest_id.split('|')[0];
                                 const isBonusApp = ['b3', 'b4', 'b5', 'b6', 'b7'].includes(questBase);
                                 const BONUS_LABELS: Record<string, string> = {

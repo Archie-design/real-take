@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ShieldAlert, Dices, Loader2, ChevronDown, ChevronUp, Banknote, CalendarCheck, Building2 } from 'lucide-react';
 import { DAILY_QUEST_CONFIG, SQUAD_ROLES } from '@/lib/constants';
-import { TeamSettings, W4Application, FinePaymentRecord, SquadFineSubmission } from '@/types';
+import { TeamSettings, BonusApplication, FinePaymentRecord, SquadFineSubmission } from '@/types';
 // SquadFineSubmission used in orgSubmissions prop below
 
 interface SquadMemberFine {
@@ -21,9 +21,9 @@ interface SquadMemberRole {
 interface CaptainTabProps {
     teamName: string;
     teamSettings?: TeamSettings;
-    pendingW4Apps: W4Application[];
+    pendingBonusApps: BonusApplication[];
     onDrawWeeklyQuest: () => Promise<void>;
-    onReviewW4: (appId: string, approve: boolean, notes: string) => Promise<void>;
+    onReviewBonus: (appId: string, approve: boolean, notes: string) => Promise<void>;
     // 小隊角色指派
     squadMembersForRoles?: SquadMemberRole[];
     onSetSquadRole?: (targetUserId: string, role: string | null) => Promise<void>;
@@ -93,7 +93,7 @@ function getCurrentWeekMondayStr(): string {
 }
 
 export function CaptainTab({
-    teamName, teamSettings, pendingW4Apps, onDrawWeeklyQuest, onReviewW4,
+    teamName, teamSettings, pendingBonusApps, onDrawWeeklyQuest, onReviewBonus,
     squadMembersForRoles = [], onSetSquadRole,
     squadFineMembers, fineHistory, orgSubmissions, onRecordPayment, onSetPaidToCaptainDate, onRecordOrgSubmission, isLoadingFines,
     onCheckW3Compliance, isCheckingCompliance, complianceResult,
@@ -139,7 +139,7 @@ export function CaptainTab({
 
     const handleReview = async (appId: string, approve: boolean) => {
         setReviewingId(appId);
-        await onReviewW4(appId, approve, reviewNotes[appId] || '');
+        await onReviewBonus(appId, approve, reviewNotes[appId] || '');
         setReviewingId(null);
         setReviewNotes(prev => { const n = { ...prev }; delete n[appId]; return n; });
     };
@@ -486,51 +486,121 @@ export function CaptainTab({
                 </section>
             )}
 
-            {/* ❤️ 電影推廣分數初審 */}
+            {/* ❤️ 傳愛申請初審 */}
             <section className="bg-slate-900 border-2 border-pink-500/30 p-8 rounded-4xl space-y-6 shadow-xl">
                 <h3 className="text-lg font-black text-white border-b border-white/10 pb-4">❤️ 傳愛申請審核（小隊長初審）</h3>
 
-                {pendingW4Apps.length === 0 ? (
-                    <p className="text-sm text-slate-500 text-center py-4">目前無待審申請</p>
-                ) : (
-                    <div className="space-y-4">
-                        {pendingW4Apps.map(app => (
-                            <div key={app.id} className="bg-slate-800 rounded-2xl p-5 space-y-3">
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <p className="font-black text-white">{app.user_name}</p>
-                                        <p className="text-xs text-slate-400">訪談：{app.interview_target} · {app.interview_date}</p>
+                {(() => {
+                    const interviewApps = pendingBonusApps.filter(a => a.quest_id.startsWith('w4|'));
+                    return interviewApps.length === 0 ? (
+                        <p className="text-sm text-slate-500 text-center py-4">目前無待審傳愛申請</p>
+                    ) : (
+                        <div className="space-y-4">
+                            {interviewApps.map(app => (
+                                <div key={app.id} className="bg-slate-800 rounded-2xl p-5 space-y-3">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <p className="font-black text-white">{app.user_name}</p>
+                                            <p className="text-xs text-slate-400">訪談：{app.interview_target} · {app.interview_date}</p>
+                                        </div>
+                                        <span className="text-[10px] font-black text-yellow-400 bg-yellow-400/10 px-2 py-1 rounded-lg">待初審</span>
                                     </div>
-                                    <span className="text-[10px] font-black text-yellow-400 bg-yellow-400/10 px-2 py-1 rounded-lg">待初審</span>
+                                    {app.description && <p className="text-xs text-slate-400 italic">{app.description}</p>}
+                                    <textarea
+                                        placeholder="備註（選填）"
+                                        value={reviewNotes[app.id] || ''}
+                                        onChange={e => setReviewNotes(prev => ({ ...prev, [app.id]: e.target.value }))}
+                                        rows={2}
+                                        className="w-full bg-slate-700 border border-slate-600 rounded-xl p-3 text-white text-xs outline-none focus:border-pink-500 resize-none"
+                                    />
+                                    <div className="flex gap-3">
+                                        <button
+                                            disabled={reviewingId === app.id}
+                                            onClick={() => handleReview(app.id, false)}
+                                            className="flex-1 py-2 bg-red-600/20 text-red-400 font-black rounded-xl text-sm border border-red-600/30 active:scale-95 transition-all disabled:opacity-50"
+                                        >
+                                            ❌ 駁回
+                                        </button>
+                                        <button
+                                            disabled={reviewingId === app.id}
+                                            onClick={() => handleReview(app.id, true)}
+                                            className="flex-2 py-2 bg-emerald-600 text-white font-black rounded-xl text-sm shadow-lg active:scale-95 transition-all disabled:opacity-50"
+                                        >
+                                            ✅ 初審通過
+                                        </button>
+                                    </div>
                                 </div>
-                                {app.description && <p className="text-xs text-slate-400 italic">{app.description}</p>}
-                                <textarea
-                                    placeholder="備註（選填）"
-                                    value={reviewNotes[app.id] || ''}
-                                    onChange={e => setReviewNotes(prev => ({ ...prev, [app.id]: e.target.value }))}
-                                    rows={2}
-                                    className="w-full bg-slate-700 border border-slate-600 rounded-xl p-3 text-white text-xs outline-none focus:border-pink-500 resize-none"
-                                />
-                                <div className="flex gap-3">
-                                    <button
-                                        disabled={reviewingId === app.id}
-                                        onClick={() => handleReview(app.id, false)}
-                                        className="flex-1 py-2 bg-red-600/20 text-red-400 font-black rounded-xl text-sm border border-red-600/30 active:scale-95 transition-all disabled:opacity-50"
-                                    >
-                                        ❌ 駁回
-                                    </button>
-                                    <button
-                                        disabled={reviewingId === app.id}
-                                        onClick={() => handleReview(app.id, true)}
-                                        className="flex-2 py-2 bg-emerald-600 text-white font-black rounded-xl text-sm shadow-lg active:scale-95 transition-all disabled:opacity-50"
-                                    >
-                                        ✅ 初審通過
-                                    </button>
+                            ))}
+                        </div>
+                    );
+                })()}
+            </section>
+
+            {/* 📋 聯誼會報名審核 */}
+            <section className="bg-slate-900 border-2 border-blue-500/30 p-8 rounded-4xl space-y-6 shadow-xl">
+                <h3 className="text-lg font-black text-white border-b border-white/10 pb-4">📋 聯誼會報名審核（小隊長初審）</h3>
+
+                {(() => {
+                    const b5b6Apps = pendingBonusApps.filter(a => a.quest_id === 'b5' || a.quest_id === 'b6');
+                    return b5b6Apps.length === 0 ? (
+                        <p className="text-sm text-slate-500 text-center py-4">目前無待審聯誼會申請</p>
+                    ) : (
+                        <div className="space-y-4">
+                            {b5b6Apps.map(app => (
+                                <div key={app.id} className="bg-slate-800 rounded-2xl p-5 space-y-3">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <p className="font-black text-white">{app.user_name}</p>
+                                            <p className="text-xs text-slate-400">報名項目：{app.interview_target}</p>
+                                        </div>
+                                        <div className="flex flex-col items-end gap-1">
+                                            <span className="text-[10px] font-black text-blue-300 bg-blue-500/20 px-2 py-1 rounded-lg">
+                                                {app.quest_id === 'b5' ? '1年' : '2年'}
+                                            </span>
+                                            <span className="text-[10px] font-black text-yellow-400 bg-yellow-400/10 px-2 py-1 rounded-lg">待初審</span>
+                                        </div>
+                                    </div>
+                                    {app.description && <p className="text-xs text-slate-400 italic">{app.description}</p>}
+                                    {app.screenshot_url && (
+                                        <div className="space-y-1">
+                                            <p className="text-[10px] text-slate-400 font-bold">截圖憑證</p>
+                                            <a href={app.screenshot_url} target="_blank" rel="noopener noreferrer">
+                                                <img
+                                                    src={app.screenshot_url}
+                                                    alt="申請截圖"
+                                                    className="w-full max-h-48 object-contain rounded-xl border border-slate-600 cursor-pointer hover:opacity-80 transition-opacity"
+                                                />
+                                            </a>
+                                        </div>
+                                    )}
+                                    <textarea
+                                        placeholder="備註（選填）"
+                                        value={reviewNotes[app.id] || ''}
+                                        onChange={e => setReviewNotes(prev => ({ ...prev, [app.id]: e.target.value }))}
+                                        rows={2}
+                                        className="w-full bg-slate-700 border border-slate-600 rounded-xl p-3 text-white text-xs outline-none focus:border-blue-500 resize-none"
+                                    />
+                                    <div className="flex gap-3">
+                                        <button
+                                            disabled={reviewingId === app.id}
+                                            onClick={() => handleReview(app.id, false)}
+                                            className="flex-1 py-2 bg-red-600/20 text-red-400 font-black rounded-xl text-sm border border-red-600/30 active:scale-95 transition-all disabled:opacity-50"
+                                        >
+                                            ❌ 駁回
+                                        </button>
+                                        <button
+                                            disabled={reviewingId === app.id}
+                                            onClick={() => handleReview(app.id, true)}
+                                            className="flex-2 py-2 bg-emerald-600 text-white font-black rounded-xl text-sm shadow-lg active:scale-95 transition-all disabled:opacity-50"
+                                        >
+                                            ✅ 初審通過
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
+                            ))}
+                        </div>
+                    );
+                })()}
             </section>
         </div>
     );

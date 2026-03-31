@@ -1,15 +1,18 @@
+'use client';
+
 import { useState } from 'react';
 import {
     Phone, Mic, Award, Users, PhoneCall,
-    GraduationCap, Sparkles, Handshake, BookOpen, Megaphone, Ticket,
+    GraduationCap, Sparkles, Handshake, BookOpen, Megaphone, Ticket, Upload,
     Film, Clapperboard, AlertTriangle,
     type LucideIcon,
 } from 'lucide-react';
-import { Quest, DailyLog, SystemSettings, TemporaryQuest, W4Application, FineSettings } from '@/types';
+import { Quest, DailyLog, SystemSettings, TemporaryQuest, BonusApplication, FineSettings } from '@/types';
 import { WEEKLY_QUEST_CONFIG, SQUAD_THEME_CONFIG, QUEST_ICON_MAP, SQUAD_THEME_ICON_MAP } from '@/lib/constants';
 import { getLogicalDateStr, getCurrentThemePeriod } from '@/lib/utils/time';
 
 interface WeeklyTopicTabProps {
+    userId: string;
     systemSettings: SystemSettings;
     fineSettings?: FineSettings;
     logicalTodayStr: string;
@@ -17,11 +20,11 @@ interface WeeklyTopicTabProps {
     currentWeeklyMonday: Date;
     isTopicDone: boolean;
     temporaryQuests: TemporaryQuest[];
-    w4Applications: W4Application[];
+    bonusApplications: BonusApplication[];
     onCheckIn: (q: Quest) => void;
     onUndo: (q: Quest) => void;
-    onSubmitW4: (data: { interviewTarget: string; interviewDate: string; description: string }) => Promise<void>;
-    onSubmitBonusApp: (type: 'b3' | 'b4' | 'b5' | 'b6' | 'b7', target: string, date: string, desc: string) => Promise<void>;
+    onSubmitInterview: (data: { interviewTarget: string; interviewDate: string; description: string }) => Promise<void>;
+    onSubmitBonusApp: (type: 'b3' | 'b4' | 'b5' | 'b6' | 'b7', target: string, date: string, desc: string, screenshotUrl?: string) => Promise<void>;
 }
 
 const BONUS_CONFIG: Array<{
@@ -47,7 +50,14 @@ const BONUS_ICON_MAP: Record<string, LucideIcon> = {
     b7: BookOpen,
 };
 
-const W4_STATUS_LABELS: Record<string, { label: string; color: string }> = {
+const B3_OPTIONS = [
+    '續報三階',
+    '續報四階',
+    '續報五階',
+    '報名五運班'
+];
+
+const BONUS_STATUS_LABELS: Record<string, { label: string; color: string }> = {
     pending:       { label: '🟡 待劇組長初審', color: 'text-yellow-400' },
     squad_approved:{ label: '🔵 待發行商長終審', color: 'text-blue-400' },
     approved:      { label: '🟢 已核准（票房入帳）', color: 'text-emerald-400' },
@@ -104,6 +114,7 @@ function WeekCalendarRow({
 }
 
 export function WeeklyTopicTab({
+    userId,
     systemSettings,
     fineSettings,
     logicalTodayStr,
@@ -111,10 +122,10 @@ export function WeeklyTopicTab({
     currentWeeklyMonday,
     isTopicDone,
     temporaryQuests,
-    w4Applications,
+    bonusApplications,
     onCheckIn,
     onUndo,
-    onSubmitW4,
+    onSubmitInterview,
     onSubmitBonusApp,
 }: WeeklyTopicTabProps) {
     // ── 當前電影主題週期 ──
@@ -134,6 +145,9 @@ export function WeeklyTopicTab({
     const [bonusDate, setBonusDate] = useState(getLogicalDateStr(new Date()));
     const [bonusDesc, setBonusDesc] = useState('');
     const [isSubmittingBonus, setIsSubmittingBonus] = useState(false);
+    const [bonusScreenshot, setBonusScreenshot] = useState<File | null>(null);
+    const [isUploadingScreenshot, setIsUploadingScreenshot] = useState(false);
+    const [screenshotUrl, setScreenshotUrl] = useState<string>('');
 
     // ── 小隊主題定聚選擇 state ──
     const [selectedTheme, setSelectedTheme] = useState<string | null>(null);
@@ -142,7 +156,7 @@ export function WeeklyTopicTab({
         e.preventDefault();
         if (!w4Target.trim()) return;
         setIsSubmittingW4(true);
-        await onSubmitW4({
+        await onSubmitInterview({
             interviewTarget: w4Target,
             interviewDate: w4Date,
             description: `[${w4BonusType === 'b2' ? '訂金5千以上' : '訂金5千以下'}] ${w4Desc}`.trim(),
@@ -156,12 +170,51 @@ export function WeeklyTopicTab({
     const handleBonusSubmit = async (e: { preventDefault: () => void }) => {
         e.preventDefault();
         if (!activeBonusForm || !bonusTarget.trim()) return;
+
+        let uploadedUrl = '';
+
+        // b5/b6 需要上傳截圖
+        if ((activeBonusForm === 'b5' || activeBonusForm === 'b6') && bonusScreenshot) {
+            setIsUploadingScreenshot(true);
+            try {
+                const formData = new FormData();
+                formData.append('file', bonusScreenshot);
+                formData.append('userId', userId);
+
+                const response = await fetch('/api/upload/bonus-screenshot', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.error || '上傳失敗');
+                }
+
+                uploadedUrl = result.url;
+                setScreenshotUrl(uploadedUrl);
+            } catch (err: any) {
+                setIsUploadingScreenshot(false);
+                alert('截圖上傳失敗：' + (err.message || '未知錯誤'));
+                return;
+            }
+            setIsUploadingScreenshot(false);
+        }
+
         setIsSubmittingBonus(true);
-        await onSubmitBonusApp(activeBonusForm, bonusTarget.trim(), bonusDate, bonusDesc.trim());
-        setIsSubmittingBonus(false);
-        setActiveBonusForm(null);
-        setBonusTarget('');
-        setBonusDesc('');
+        try {
+            await onSubmitBonusApp(activeBonusForm, bonusTarget.trim(), bonusDate, bonusDesc.trim(), uploadedUrl || screenshotUrl);
+            setActiveBonusForm(null);
+            setBonusTarget('');
+            setBonusDesc('');
+            setBonusScreenshot(null);
+            setScreenshotUrl('');
+        } catch (err) {
+            alert('提交失敗：' + (err instanceof Error ? err.message : '未知錯誤'));
+        } finally {
+            setIsSubmittingBonus(false);
+        }
     };
 
     const makeWeekHandler = (questId: string, quest: Quest) => ({
@@ -208,8 +261,8 @@ export function WeeklyTopicTab({
         ? logs.filter(l => l.QuestID.startsWith(t3Base + '|')).length
         : 0;
 
-    // ── b3-b7 申請記錄（從 w4Applications 篩選）──
-    const bonusApps = w4Applications.filter(a =>
+    // ── b3-b7 申請記錄（從 bonusApplications 篩選）──
+    const bonusApps = bonusApplications.filter((a: BonusApplication) =>
         ['b3', 'b4', 'b5', 'b6', 'b7'].some(id => a.quest_id === id || a.quest_id.startsWith(id + '|'))
     );
 
@@ -630,11 +683,11 @@ export function WeeklyTopicTab({
                         </form>
                     )}
 
-                    {w4Applications.length > 0 && (
+                    {bonusApplications.filter((a: BonusApplication) => a.quest_id.startsWith('w4|')).length > 0 && (
                         <div className="space-y-2 pt-2 border-t border-[#333]">
                             <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">申請記錄</p>
-                            {w4Applications.map(app => {
-                                const si = W4_STATUS_LABELS[app.status] ?? { label: app.status, color: 'text-gray-400' };
+                            {bonusApplications.filter((a: BonusApplication) => a.quest_id.startsWith('w4|')).map((app: BonusApplication) => {
+                                const si = BONUS_STATUS_LABELS[app.status] ?? { label: app.status, color: 'text-gray-400' };
                                 return (
                                     <div key={app.id} className="bg-[#222] rounded-2xl p-3.5 space-y-1">
                                         <div className="flex justify-between items-start">
@@ -704,13 +757,27 @@ export function WeeklyTopicTab({
                                             </button>
                                         ) : (
                                             <form onSubmit={handleBonusSubmit} className="space-y-2 text-left animate-in slide-in-from-top-2 duration-200">
-                                                <input
-                                                    required
-                                                    value={bonusTarget}
-                                                    onChange={e => setBonusTarget(e.target.value)}
-                                                    placeholder={cfg.id === 'b7' ? '課程名稱' : cfg.id === 'b4' ? '小天使編號或說明' : '說明'}
-                                                    className="w-full bg-[#222] border border-[#333] rounded-xl px-3 py-2.5 text-white text-sm font-bold outline-none focus:border-[#D4AF37] placeholder:text-gray-600"
-                                                />
+                                                {cfg.id === 'b3' ? (
+                                                    <select
+                                                        required
+                                                        value={bonusTarget}
+                                                        onChange={e => setBonusTarget(e.target.value)}
+                                                        className="w-full bg-[#222] border border-[#333] rounded-xl px-3 py-2.5 text-white text-sm font-bold outline-none focus:border-[#D4AF37] appearance-none cursor-pointer"
+                                                    >
+                                                        <option value="">選擇報名課程…</option>
+                                                        {B3_OPTIONS.map(option => (
+                                                            <option key={option} value={option}>{option}</option>
+                                                        ))}
+                                                    </select>
+                                                ) : (
+                                                    <input
+                                                        required
+                                                        value={bonusTarget}
+                                                        onChange={e => setBonusTarget(e.target.value)}
+                                                        placeholder={cfg.id === 'b7' ? '課程名稱' : cfg.id === 'b4' ? '小天使編號或說明' : '說明'}
+                                                        className="w-full bg-[#222] border border-[#333] rounded-xl px-3 py-2.5 text-white text-sm font-bold outline-none focus:border-[#D4AF37] placeholder:text-gray-600"
+                                                    />
+                                                )}
                                                 <input
                                                     required
                                                     type="date"
@@ -725,10 +792,30 @@ export function WeeklyTopicTab({
                                                     placeholder="備註（選填）"
                                                     className="w-full bg-[#222] border border-[#333] rounded-xl px-3 py-2.5 text-white text-sm font-bold outline-none focus:border-[#D4AF37] resize-none placeholder:text-gray-600"
                                                 />
+                                                {(cfg.id === 'b5' || cfg.id === 'b6') && (
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">上傳截圖 (必填)</label>
+                                                        <div className="flex items-center justify-center gap-2 w-full px-4 py-3 border-2 border-dashed border-[#333] rounded-xl bg-[#222] hover:border-[#D4AF37]/50 hover:bg-[#222]/80 transition-colors cursor-pointer relative">
+                                                            <input
+                                                                type="file"
+                                                                accept="image/*"
+                                                                onChange={e => setBonusScreenshot(e.target.files?.[0] || null)}
+                                                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                                            />
+                                                            <Upload size={14} className="text-gray-500" />
+                                                            <span className="text-xs text-gray-500 font-bold">
+                                                                {bonusScreenshot ? bonusScreenshot.name : '點擊上傳截圖或拖拽'}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                )}
                                                 <div className="flex gap-2">
-                                                    <button type="button" onClick={() => setActiveBonusForm(null)} className="flex-1 py-2.5 bg-[#222] text-gray-400 font-bold rounded-xl text-sm">取消</button>
-                                                    <button type="submit" disabled={isSubmittingBonus || !bonusTarget.trim()} className="flex-2 py-2.5 bg-[#D4AF37] text-black font-black rounded-xl text-sm active:scale-95 transition-all disabled:opacity-50">
-                                                        {isSubmittingBonus ? '提交中…' : '確認送出'}
+                                                    <button type="button" onClick={() => { setActiveBonusForm(null); setBonusScreenshot(null); }} className="flex-1 py-2.5 bg-[#222] text-gray-400 font-bold rounded-xl text-sm">取消</button>
+                                                    <button
+                                                        type="submit"
+                                                        disabled={isSubmittingBonus || isUploadingScreenshot || !bonusTarget.trim() || ((cfg.id === 'b5' || cfg.id === 'b6') && !bonusScreenshot)}
+                                                        className="flex-2 py-2.5 bg-[#D4AF37] text-black font-black rounded-xl text-sm active:scale-95 transition-all disabled:opacity-50">
+                                                        {isUploadingScreenshot ? '上傳中…' : isSubmittingBonus ? '提交中…' : '確認送出'}
                                                     </button>
                                                 </div>
                                             </form>

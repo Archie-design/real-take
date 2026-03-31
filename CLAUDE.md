@@ -70,7 +70,7 @@ The codebase uses **both** database clients for different purposes:
 | `admin.ts` | pg transaction | Weekly snapshot, roster import, procedural map entity generation |
 | `course.ts` | Supabase | Course registration (`registerForCourse`), attendance marking (`markAttendance`), list query |
 | `fines.ts` | Supabase | Squad fine tracking, org submission records |
-| `w4.ts` | Supabase | 傳愛分數 application lifecycle (submit → squad review → admin final) |
+| `bonus.ts` | Supabase | 傳愛分數 + 聯誼會截圖申請 (interview + b3-b7 bonus quests) |
 | `testimony.ts` | Supabase | Member testimony submission |
 | `testimonies_admin.ts` | Supabase | Admin review of testimonies |
 
@@ -124,8 +124,9 @@ Additional LINE-related env vars: `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TO
 
 ### Database Schema Reference
 
-Main tables: `CharacterStats`, `DailyLogs`, `TeamSettings`, `temporaryquests`, `MandatoryQuestHistory`, `CourseRegistrations`, `CourseAttendance`, `SystemSettings`, `Testimonies`, `TopicHistory`, `W4Applications`, `AdminLogs`, `FinePayments`
+Main tables: `CharacterStats`, `DailyLogs`, `TeamSettings`, `temporaryquests`, `MandatoryQuestHistory`, `CourseRegistrations`, `CourseAttendance`, `SystemSettings`, `Testimonies`, `TopicHistory`, `BonusApplications`, `AdminLogs`, `FinePayments`
 
 Supabase RPC functions defined in `supabase/migrations/`: `transfer_dice`, `transfer_golden_dice`, `checkin_rpc`
 
 One-off migration/repair scripts live in `scripts/` — run with `npx ts-node scripts/<name>.ts`. These are idempotent DB fixups and data migrations, not part of the normal deployment pipeline.
+
