@@ -13,25 +13,35 @@ export const BASE_START_DATE_STR = "2026-02-01";
 export const END_DATE = "2026-06-28";
 export const PENALTY_PER_DAY = 50;
 
+/**
+ * 門檻公式：9000 + (Level - 1) * 100
+ */
+const BASE_REQ = 9000;
+const INCREMENT = 100;
+
+export function getAccumulatedExpForLevel(level: number): number {
+    if (level <= 1) return 0;
+    const n = level - 1;
+    // 等差級數和公式: n/2 * (2*a + (n-1)*d)
+    return Math.floor((n / 2) * (2 * BASE_REQ + (n - 1) * INCREMENT));
+}
+
+export function getExpForNextLevel(level: number): number {
+    if (level >= 99) return 0;
+    return BASE_REQ + (level - 1) * INCREMENT;
+}
+
 export function calculateLevelFromExp(exp: number): number {
     let currentLevel = 1;
-    let accumulatedExp = 0;
-
     while (currentLevel < 99) {
-        const nextLevelRequired = 15336 - currentLevel * 136;
-        if (exp >= accumulatedExp + nextLevelRequired) {
-            accumulatedExp += nextLevelRequired;
+        // 如果票房足夠達到下一級的門檻，就升級
+        if (exp >= getAccumulatedExpForLevel(currentLevel + 1)) {
             currentLevel++;
         } else {
             break;
         }
     }
     return currentLevel;
-}
-
-export function getExpForNextLevel(currentLevel: number): number {
-    if (currentLevel >= 99) return 0;
-    return 15336 - currentLevel * 136;
 }
 
 export const ADMIN_PASSWORD = "123";

@@ -1,7 +1,7 @@
 import React from 'react';
 import { LogOut } from 'lucide-react';
 import { CharacterStats } from '@/types';
-import { getExpForNextLevel } from '@/lib/constants';
+import { getExpForNextLevel, getAccumulatedExpForLevel } from '@/lib/constants';
 
 interface HeaderProps {
     userData: CharacterStats | null;
@@ -14,11 +14,8 @@ export function Header({ userData, onLogout }: HeaderProps) {
     let nextLevelExp = 0;
 
     if (userData) {
-        let accumulatedExp = 0;
-        for (let i = 1; i < userData.Level; i++) {
-            accumulatedExp += 15336 - i * 136;
-        }
-        expInCurrentLevel = userData.Exp - accumulatedExp;
+        const currentLevelStartExp = getAccumulatedExpForLevel(userData.Level);
+        expInCurrentLevel = userData.Exp - currentLevelStartExp;
         nextLevelExp = getExpForNextLevel(userData.Level);
         progressPercent = userData.Level >= 99 ? 100 : Math.min(100, Math.max(0, (expInCurrentLevel / nextLevelExp) * 100));
     }
