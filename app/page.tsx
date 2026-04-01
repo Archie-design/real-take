@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 import {
@@ -83,6 +83,9 @@ export default function App() {
   const [orgSubmissions, setOrgSubmissions] = useState<import('@/types').SquadFineSubmission[]>([]);
   const [isCheckingCompliance, setIsCheckingCompliance] = useState(false);
   const [complianceResult, setComplianceResult] = useState<{ periodLabel: string; violators: { userId: string; name: string; missingSum?: number; fineAdded?: number }[]; alreadyRun: boolean } | null>(null);
+
+  // LINE login progress flag to prevent flash of login page during async DB work
+  const lineLoginInProgress = useRef(false);
 
   const showCaptainTab = userData?.IsGM
     ? (gmViewMode === 'all' || gmViewMode === 'captain')
@@ -662,6 +665,7 @@ export default function App() {
         if (lineUid || lineBound || lineError) {
           window.history.replaceState({}, '', '/');
           if (lineUid) {
+            lineLoginInProgress.current = true;
             // LINE login: auto-load user from DB then enter app
             const uid = decodeURIComponent(lineUid);
             const { data: stats, error } = await supabase.from('CharacterStats').select('*').eq('UserID', uid).single();
@@ -686,8 +690,10 @@ export default function App() {
                 const commandantRes = await getBonusApplications({ status: 'squad_approved' });
                 if (commandantRes.success) setPendingFinalReviewApps(commandantRes.applications);
               }
+              lineLoginInProgress.current = false;
               setView('app');
             } else {
+              lineLoginInProgress.current = false;
               setView('login');
             }
             return;
@@ -706,7 +712,9 @@ export default function App() {
       }
 
       // 無 session 儲存，每次重整都回到登入頁
-      setView(v => v === 'loading' ? 'login' : v);
+      if (!lineLoginInProgress.current) {
+        setView(v => v === 'loading' ? 'login' : v);
+      }
     };
     init();
   }, [userData]);
