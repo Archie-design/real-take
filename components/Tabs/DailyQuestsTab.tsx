@@ -199,12 +199,12 @@ function RelationshipQuestSection({ todayR1Count, logs, logicalTodayStr, onCheck
                 </div>
                 <div className="flex-1">
                     <div className="flex items-center gap-2">
-                        <h3 className="font-black text-white text-base">人脈電影推廣</h3>
+                        <h3 className="font-black text-white text-base">關係定課</h3>
                         <span className="text-[10px] font-black bg-[#333] text-gray-300 px-2 py-0.5 rounded-full">
-                            {todayR1Count} / 3 名觀眾
+                            {todayR1Count} / 3 名
                         </span>
                     </div>
-                    <p className="text-[10px] text-gray-500 mt-0.5">與三貴人或伴侶深度交流，推播生命劇本（≥15 分鐘）</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">與三貴人或伴侶進行有品質互動（≥15分鐘），上級有真誠回報/分享亦可計</p>
                 </div>
                 <div className="text-right shrink-0">
                     <p className="font-black text-lg text-emerald-400">+2000</p>
