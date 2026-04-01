@@ -18,7 +18,7 @@ export function calculateLevelFromExp(exp: number): number {
     let accumulatedExp = 0;
 
     while (currentLevel < 99) {
-        const nextLevelRequired = currentLevel * 5 + 480;
+        const nextLevelRequired = 15336 - currentLevel * 136;
         if (exp >= accumulatedExp + nextLevelRequired) {
             accumulatedExp += nextLevelRequired;
             currentLevel++;
@@ -31,7 +31,7 @@ export function calculateLevelFromExp(exp: number): number {
 
 export function getExpForNextLevel(currentLevel: number): number {
     if (currentLevel >= 99) return 0;
-    return currentLevel * 5 + 480;
+    return 15336 - currentLevel * 136;
 }
 
 export const ADMIN_PASSWORD = "123";

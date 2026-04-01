@@ -16,7 +16,7 @@ export function Header({ userData, onLogout }: HeaderProps) {
     if (userData) {
         let accumulatedExp = 0;
         for (let i = 1; i < userData.Level; i++) {
-            accumulatedExp += i * 5 + 480;
+            accumulatedExp += 15336 - i * 136;
         }
         expInCurrentLevel = userData.Exp - accumulatedExp;
         nextLevelExp = getExpForNextLevel(userData.Level);
