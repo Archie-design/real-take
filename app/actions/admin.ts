@@ -330,3 +330,57 @@ export async function saveBirthday(userId: string, birthday: string) {
     if (error) return { success: false, error: error.message };
     return { success: true };
 }
+
+// ── 成員管理：列出全部成員 ────────────────────────────────
+export async function listAllMembers() {
+    const supabase = createClient(_supabaseUrl, _supabaseKey);
+    const { data, error } = await supabase
+        .from('CharacterStats')
+        .select('UserID, Name, Email, SquadName, TeamName, IsCaptain, IsCommandant, Level, Exp')
+        .order('Name');
+    if (error) return { success: false, error: error.message, members: [] };
+    return { success: true, members: data || [] };
+}
+
+// ── 成員管理：轉隊（更換 SquadName / TeamName）──────────────
+export async function transferMember(
+    targetUserId: string,
+    newSquadName: string | null,
+    newTeamName: string | null,
+    actorName: string = 'admin'
+) {
+    const supabase = createClient(_supabaseUrl, _supabaseKey);
+    const { data: before } = await supabase.from('CharacterStats').select('Name, SquadName, TeamName').eq('UserID', targetUserId).single();
+    if (!before) return { success: false, error: '找不到此成員' };
+
+    const { error } = await supabase
+        .from('CharacterStats')
+        .update({ SquadName: newSquadName, TeamName: newTeamName })
+        .eq('UserID', targetUserId);
+    if (error) return { success: false, error: error.message };
+
+    await logAdminAction('member_transfer', actorName, targetUserId, before.Name, {
+        from: { squad: before.SquadName, team: before.TeamName },
+        to: { squad: newSquadName, team: newTeamName },
+    });
+    return { success: true };
+}
+
+// ── 成員管理：設定隊長/大隊長角色 ────────────────────────────
+export async function setMemberRole(
+    targetUserId: string,
+    role: 'captain' | 'commandant' | 'none',
+    actorName: string = 'admin'
+) {
+    const supabase = createClient(_supabaseUrl, _supabaseKey);
+    const update: Record<string, boolean> = {};
+    if (role === 'captain') { update.IsCaptain = true; update.IsCommandant = false; }
+    else if (role === 'commandant') { update.IsCaptain = false; update.IsCommandant = true; }
+    else { update.IsCaptain = false; update.IsCommandant = false; }
+
+    const { error } = await supabase.from('CharacterStats').update(update).eq('UserID', targetUserId);
+    if (error) return { success: false, error: error.message };
+
+    await logAdminAction('member_role_change', actorName, targetUserId, undefined, { role });
+    return { success: true };
+}

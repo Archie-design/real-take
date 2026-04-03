@@ -14,6 +14,8 @@ interface SquadRankEntry {
     memberCount: number;
     members: CharacterStats[];
     topMember: CharacterStats;
+    commandantBonus?: number;   // 大隊長貢獻的 Exp（顯示用）
+    commandantName?: string;
 }
 
 const RANK_BADGE: Record<number, string> = {
@@ -40,9 +42,15 @@ export function RankTab({ leaderboard, currentUserId }: RankTabProps) {
     );
 
     // ── 小隊排名（人數平均制：小隊分數 = 總分 ÷ 人數）────────────────────
+    // 大隊長計入所屬大隊每個小隊：各隊 totalExp += 大隊長全額 Exp，memberCount += 1
     const squadRank = useMemo<SquadRankEntry[]>(() => {
         const map = new Map<string, SquadRankEntry>();
+        const commandants: CharacterStats[] = [];
+
         for (const p of leaderboard) {
+            // 大隊長另外處理，不歸入任何單一小隊
+            if (p.IsCommandant) { commandants.push(p); continue; }
+
             const key = p.TeamName || `__solo_${p.UserID}`;
             if (!map.has(key)) {
                 map.set(key, {
@@ -60,7 +68,22 @@ export function RankTab({ leaderboard, currentUserId }: RankTabProps) {
             entry.members.push(p);
             if (p.Exp > entry.topMember.Exp) entry.topMember = p;
         }
-        // 規格書 §5.1：小隊分數 = 小隊全員分數總和 ÷ 小隊現有人數
+
+        // 大隊長納入所屬大隊的每個小隊，等同多一位隊員
+        for (const cmd of commandants) {
+            if (!cmd.SquadName) continue;
+            const battalionSquads = [...map.values()].filter(e => e.teamName === cmd.SquadName);
+            for (const squad of battalionSquads) {
+                squad.totalExp += cmd.Exp;
+                squad.memberCount += 1;
+                squad.members.push(cmd);
+                squad.commandantBonus = cmd.Exp;
+                squad.commandantName = cmd.Name;
+                if (cmd.Exp > squad.topMember.Exp) squad.topMember = cmd;
+            }
+        }
+
+        // 規格書 §5.1：小隊分數 = 小隊全員分數總和 ÷ 小隊現有人數（含大隊長）
         return [...map.values()]
             .filter(e => e.memberCount > 0)
             .sort((a, b) => (b.totalExp / b.memberCount) - (a.totalExp / a.memberCount));
@@ -69,12 +92,12 @@ export function RankTab({ leaderboard, currentUserId }: RankTabProps) {
     return (
         <div className="space-y-4 animate-in fade-in mx-auto text-center">
             {/* Tab 切換 */}
-            <div className="flex gap-2 bg-[#111] border border-[#333] rounded-2xl p-1.5">
+            <div className="flex gap-2 bg-[#1B2A4A] border border-[#253A5C] rounded-2xl p-1.5">
                 <button
                     onClick={() => setTab('personal')}
                     className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-black text-sm transition-all ${
                         tab === 'personal'
-                            ? 'bg-[#E50914] text-white shadow-lg shadow-[0_0_15px_rgba(229,9,20,0.4)]'
+                            ? 'bg-[#C0392B] text-white shadow-lg shadow-[0_0_15px_rgba(229,9,20,0.4)]'
                             : 'text-gray-500 hover:text-gray-300'
                     }`}
                 >
@@ -84,7 +107,7 @@ export function RankTab({ leaderboard, currentUserId }: RankTabProps) {
                     onClick={() => setTab('squad')}
                     className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-black text-sm transition-all ${
                         tab === 'squad'
-                            ? 'bg-[#D4AF37] text-black shadow-lg shadow-[0_0_15px_rgba(212,175,55,0.4)]'
+                            ? 'bg-[#F5C842] text-black shadow-lg shadow-[0_0_15px_rgba(212,175,55,0.4)]'
                             : 'text-gray-500 hover:text-gray-300'
                     }`}
                 >
@@ -94,8 +117,8 @@ export function RankTab({ leaderboard, currentUserId }: RankTabProps) {
 
             {/* 個人排行 */}
             {tab === 'personal' && (
-                <div className="bg-[#111] border border-[#333] rounded-[2.5rem] overflow-hidden divide-y divide-[#333] shadow-2xl">
-                    <div className="p-4 bg-black/50 flex items-center gap-2 text-[#D4AF37] font-black text-xs uppercase tracking-widest justify-center">
+                <div className="bg-[#1B2A4A] border border-[#253A5C] rounded-[2.5rem] overflow-hidden divide-y divide-[#253A5C] shadow-2xl">
+                    <div className="p-4 bg-black/50 flex items-center gap-2 text-[#F5C842] font-black text-xs uppercase tracking-widest justify-center">
                         <Crown size={14} /> 個人票房榜
                     </div>
                     {personalRank.length === 0 ? (
@@ -106,7 +129,7 @@ export function RankTab({ leaderboard, currentUserId }: RankTabProps) {
                             return (
                                 <div
                                     key={p.UserID}
-                                    className={`flex items-center gap-4 p-5 ${i < 3 ? 'bg-white/5' : ''} ${isSelf ? 'ring-1 ring-inset ring-[#E50914]/40 bg-[#E50914]/5' : ''}`}
+                                    className={`flex items-center gap-4 p-5 ${i < 3 ? 'bg-white/5' : ''} ${isSelf ? 'ring-1 ring-inset ring-[#C0392B]/40 bg-[#C0392B]/5' : ''}`}
                                 >
                                     {/* 名次 */}
                                     <div className={`w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-black ${RANK_BADGE[i] ?? 'text-gray-500'}`}>
@@ -118,7 +141,7 @@ export function RankTab({ leaderboard, currentUserId }: RankTabProps) {
                                     </div>
                                     {/* 名字 */}
                                     <div className="flex-1 text-left">
-                                        <p className={`font-bold text-sm ${isSelf ? 'text-[#E50914]' : 'text-white'}`}>
+                                        <p className={`font-bold text-sm ${isSelf ? 'text-[#C0392B]' : 'text-white'}`}>
                                             {p.Name}{isSelf && ' 🍿'}
                                         </p>
                                         <p className="text-[10px] text-gray-500 italic uppercase tracking-widest">
@@ -127,7 +150,7 @@ export function RankTab({ leaderboard, currentUserId }: RankTabProps) {
                                     </div>
                                     {/* 積分 & 連續打卡 */}
                                     <div className="text-right">
-                                        <div className="text-[#E50914] font-black text-sm">
+                                        <div className="text-[#C0392B] font-black text-sm">
                                             {p.Exp.toLocaleString()}
                                             <span className="text-[8px] text-gray-600 uppercase tracking-widest ml-1">票房</span>
                                         </div>
@@ -146,8 +169,8 @@ export function RankTab({ leaderboard, currentUserId }: RankTabProps) {
 
             {/* 劇組排行 */}
             {tab === 'squad' && (
-                <div className="bg-[#111] border border-[#333] rounded-[2.5rem] overflow-hidden divide-y divide-[#333] shadow-2xl">
-                    <div className="p-4 bg-black/50 flex items-center gap-2 text-[#D4AF37] font-black text-xs uppercase tracking-widest justify-center">
+                <div className="bg-[#1B2A4A] border border-[#253A5C] rounded-[2.5rem] overflow-hidden divide-y divide-[#253A5C] shadow-2xl">
+                    <div className="p-4 bg-black/50 flex items-center gap-2 text-[#F5C842] font-black text-xs uppercase tracking-widest justify-center">
                         <Users size={14} /> 小隊榜（人數平均制）
                     </div>
                     {squadRank.length === 0 ? (
@@ -170,13 +193,18 @@ export function RankTab({ leaderboard, currentUserId }: RankTabProps) {
                                         <div className="flex-1 text-left">
                                             <p className="font-black text-sm text-white">{sq.squadName}</p>
                                             <p className="text-[10px] text-gray-500 italic tracking-widest">
-                                                {sq.memberCount} 人 · 均 {avgExp.toLocaleString()} 積分
+                                                {sq.memberCount} 人（含大隊長） · 均 {avgExp.toLocaleString()} 積分
                                                 {sq.teamName ? ` · ${sq.teamName}` : ''}
                                             </p>
+                                            {sq.commandantName && sq.commandantBonus != null && (
+                                                <p className="text-[10px] text-[#F5C842]/70 mt-0.5">
+                                                    ★ 大隊長 {sq.commandantName} +{sq.commandantBonus.toLocaleString()}
+                                                </p>
+                                            )}
                                         </div>
                                         {/* 平均積分（排序依據）*/}
                                         <div className="text-right">
-                                            <div className="text-[#D4AF37] font-black text-sm">
+                                            <div className="text-[#F5C842] font-black text-sm">
                                                 {avgExp.toLocaleString()}
                                                 <span className="text-[8px] text-gray-600 uppercase tracking-widest ml-1">均分</span>
                                             </div>
@@ -190,9 +218,11 @@ export function RankTab({ leaderboard, currentUserId }: RankTabProps) {
                                         {sq.members
                                             .sort((a, b) => b.Exp - a.Exp)
                                             .map(m => (
-                                                <div key={m.UserID} className="flex items-center gap-1 bg-[#222]/60 rounded-lg px-2 py-1 text-[10px]">
+                                                <div key={m.UserID} className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] ${m.IsCommandant ? 'bg-[#F5C842]/10 border border-[#F5C842]/30' : 'bg-[#16213E]/60'}`}>
                                                     <div className={`w-4 h-4 rounded-sm flex items-center justify-center text-white font-black text-[8px] shrink-0 ${avatarColor(m.Name)}`}>{m.Name?.[0]}</div>
                                                     <span className="text-gray-300 font-bold">{m.Name}</span>
+                                                    {m.IsCommandant && <span className="text-[#F5C842] font-black text-[8px]">大隊長</span>}
+                                                    {m.IsCaptain && !m.IsCommandant && <span className="text-indigo-400 font-black text-[8px]">隊長</span>}
                                                     <span className="text-gray-500">{m.Exp.toLocaleString()}</span>
                                                 </div>
                                             ))}

@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { CheckCircle2, XCircle, RefreshCw, Sword, Users, ChevronDown, ChevronUp } from 'lucide-react';
+import { CheckCircle2, XCircle, RefreshCw, Sword, Users, ChevronDown, ChevronUp, Film } from 'lucide-react';
 import { CharacterStats, BonusApplication, SquadMemberStats } from '@/types';
-import { reviewBonusByAdmin } from '@/app/actions/bonus';
+import { reviewBonusByAdmin, submitBonusApplication, getBonusApplications } from '@/app/actions/bonus';
 
 interface CommandantTabProps {
     userData: CharacterStats;
@@ -20,6 +20,105 @@ function isActive(lastCheckIn?: string): boolean {
     const yest = new Date(nowTW);
     yest.setUTCDate(yest.getUTCDate() - 1);
     return lastCheckIn === todayStr || lastCheckIn === yest.toISOString().slice(0, 10);
+}
+
+const DOC_DEADLINE = '2026-07-20';
+
+function DocumentarySubmission({
+    userData, onRefresh, onShowMessage,
+}: Pick<CommandantTabProps, 'userData' | 'onRefresh' | 'onShowMessage'>) {
+    const [videoUrl, setVideoUrl] = useState('');
+    const [desc, setDesc] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+    const [existingDoc, setExistingDoc] = useState<BonusApplication | null>(null);
+    const [loaded, setLoaded] = useState(false);
+
+    React.useEffect(() => {
+        getBonusApplications({}).then(res => {
+            if (res.success) {
+                const doc = res.applications.find(a => a.quest_id === 'doc1' && a.battalion_name === userData.SquadName && a.status !== 'rejected');
+                setExistingDoc(doc || null);
+            }
+            setLoaded(true);
+        });
+    }, [userData.SquadName]); // eslint-disable-line react-hooks/exhaustive-deps
+    const isExpired = new Date().toISOString().slice(0, 10) > DOC_DEADLINE;
+
+    if (!loaded) return <div className="bg-slate-900 border-2 border-amber-500/20 rounded-3xl p-5 text-center text-xs text-slate-500">載入中…</div>;
+
+    if (existingDoc) {
+        const statusLabel = { pending: '待審', squad_approved: '待終審', approved: '已核准', rejected: '已駁回' }[existingDoc.status] || existingDoc.status;
+        const statusColor = existingDoc.status === 'approved' ? 'text-emerald-400' : existingDoc.status === 'rejected' ? 'text-red-400' : 'text-amber-400';
+        return (
+            <div className="bg-slate-900 border-2 border-amber-500/20 rounded-3xl p-5 space-y-2">
+                <h3 className="text-sm font-black text-white flex items-center gap-2"><Film size={15} className="text-amber-400" /> 道在江湖紀錄片</h3>
+                <p className="text-xs text-slate-400">本大隊已提交紀錄片申請</p>
+                <div className="flex items-center gap-2">
+                    <span className={`text-xs font-black ${statusColor}`}>{statusLabel}</span>
+                    <span className="text-[10px] text-slate-500">· {existingDoc.interview_target}</span>
+                </div>
+            </div>
+        );
+    }
+
+    const handleSubmit = async () => {
+        if (!videoUrl.trim()) { onShowMessage('請填入紀錄片連結', 'error'); return; }
+        setSubmitting(true);
+        try {
+            const today = new Date().toISOString().slice(0, 10);
+            const res = await submitBonusApplication(
+                userData.UserID, userData.Name,
+                userData.TeamName || null, userData.SquadName || null,
+                'doc1', videoUrl.trim(), today, desc
+            );
+            if (res.success) {
+                onShowMessage('紀錄片已提交，待管理員審核！', 'success');
+                onRefresh();
+                setVideoUrl(''); setDesc('');
+            } else {
+                onShowMessage(res.error || '提交失敗', 'error');
+            }
+        } catch (e: any) {
+            onShowMessage('系統異常：' + e.message, 'error');
+        } finally { setSubmitting(false); }
+    };
+
+    return (
+        <div className="bg-slate-900 border-2 border-amber-500/20 rounded-3xl p-5 space-y-4">
+            <h3 className="text-sm font-black text-white flex items-center gap-2">
+                <Film size={15} className="text-amber-400" /> 道在江湖紀錄片
+                <span className="text-[10px] text-slate-500 font-normal ml-auto">截止 {DOC_DEADLINE}</span>
+            </h3>
+            <p className="text-xs text-slate-400">大隊全員以愛為出發點製作 3 分鐘紀錄片，需有文字串連或字幕。評分標準：創意、啟發人心。</p>
+            {isExpired ? (
+                <p className="text-xs text-red-400 font-bold">已超過截止日期</p>
+            ) : (
+                <>
+                    <input
+                        type="url"
+                        placeholder="紀錄片連結（YouTube / Google Drive 等）"
+                        value={videoUrl}
+                        onChange={e => setVideoUrl(e.target.value)}
+                        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-white text-xs outline-none focus:border-amber-500 transition-colors"
+                    />
+                    <textarea
+                        placeholder="補充說明（選填）"
+                        value={desc}
+                        onChange={e => setDesc(e.target.value)}
+                        rows={2}
+                        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-amber-500 resize-none transition-colors"
+                    />
+                    <button
+                        disabled={submitting}
+                        onClick={handleSubmit}
+                        className="w-full py-3 rounded-xl font-black text-sm text-white bg-amber-600 shadow-lg active:scale-95 transition-all disabled:opacity-50"
+                    >
+                        {submitting ? '提交中…' : '提交紀錄片'}
+                    </button>
+                </>
+            )}
+        </div>
+    );
 }
 
 export function CommandantTab({ userData, apps, onRefresh, onShowMessage, battalionMembers = {} }: CommandantTabProps) {
@@ -124,6 +223,9 @@ export function CommandantTab({ userData, apps, onRefresh, onShowMessage, battal
                     </div>
                 </div>
             )}
+
+            {/* ── 道在江湖紀錄片提交 ── */}
+            <DocumentarySubmission userData={userData} onRefresh={onRefresh} onShowMessage={onShowMessage} />
 
             {/* Application list */}
             {apps.length === 0 ? (

@@ -16,11 +16,12 @@ export async function submitInterviewApplication(
     battalionName: string | null,
     interviewTarget: string,
     interviewDate: string,      // YYYY-MM-DD
-    description: string = ''
+    description: string = '',
+    bonusType: 'b1' | 'b2' = 'b1'
 ) {
     const supabase = createClient(supabaseUrl, supabaseKey);
-    // questId includes target so each person's interview is a distinct check-in record
-    const questId = `w4|${interviewDate}|${interviewTarget.trim().slice(0, 50)}`;
+    // questId uses b1/b2 prefix so reward lookup matches BONUS_QUEST_CONFIG
+    const questId = `${bonusType}|${interviewDate}|${interviewTarget.trim().slice(0, 50)}`;
 
     // 防止對同一對象在同一天重複提交（同一天可以電影推廣多人，但同一對象不能重複）
     const { data: existing } = await supabase
@@ -56,13 +57,16 @@ export async function submitInterviewApplication(
     return { success: true, application: data as BonusApplication };
 }
 
-// ── b3–b7 獎勵對照表 ─────────────────────────────────────
+// ── b1–b7 獎勵對照表 ─────────────────────────────────────
 const BONUS_QUEST_CONFIG: Record<string, { reward: number; title: string }> = {
+    b1: { reward: 100, title: '傳愛（訂金5千以下）' },
+    b2: { reward: 200, title: '傳愛（訂金5千以上）' },
     b3: { reward: 5000, title: '續報高階/五運班加分' },
     b4: { reward: 5000, title: '成為小天使加分' },
     b5: { reward: 3000, title: '報名聯誼會（1年）加分' },
     b6: { reward: 5000, title: '報名聯誼會（2年）加分' },
     b7: { reward: 1000, title: '參加實體課程加分' },
+    doc1: { reward: 10000, title: '道在江湖紀錄片' },
 };
 
 // ── 劇組長：初審 ─────────────────────────────────────────
@@ -235,19 +239,34 @@ export async function reviewBonusByAdmin(
     return { success: true, newStatus };
 }
 
-// ── 學員：提交 b3–b7 加分申請 ──────────────────────────────
+// ── 學員：提交 b3–b7 / doc1 加分申請 ──────────────────────────────
 export async function submitBonusApplication(
     userId: string,
     userName: string,
     squadName: string | null,
     battalionName: string | null,
-    bonusType: 'b3' | 'b4' | 'b5' | 'b6' | 'b7',
-    target: string,      // 申請描述（課程名稱 / 聯誼會 / 課程日期…）
+    bonusType: 'b3' | 'b4' | 'b5' | 'b6' | 'b7' | 'doc1',
+    target: string,      // 申請描述（課程名稱 / 聯誼會 / 課程日期… / 紀錄片連結）
     date: string,        // YYYY-MM-DD
     description: string = '',
     screenshotUrl?: string  // b5/b6 的截圖 URL
 ) {
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // doc1：同一大隊只能提交一次（由大隊長代表提交）
+    if (bonusType === 'doc1') {
+        const { data: existing } = await supabase
+            .from('BonusApplications')
+            .select('id, status')
+            .eq('quest_id', 'doc1')
+            .eq('battalion_name', battalionName)
+            .neq('status', 'rejected')
+            .maybeSingle();
+
+        if (existing) {
+            return { success: false, error: '本大隊已有紀錄片申請記錄，無法重複提交' };
+        }
+    }
 
     // b3、b4、b5、b6 每人只能申請一次（未被駁回的情況下）
     if (['b3', 'b4', 'b5', 'b6'].includes(bonusType)) {
@@ -267,7 +286,7 @@ export async function submitBonusApplication(
     // b7 每次課程日期不同，quest_id 帶日期以允許多次申請
     const questId = bonusType === 'b7' ? `b7|${date}` : bonusType;
 
-    // b5、b6 需要截圖，送小隊長初審；其他直接進入大隊長終審
+    // b5、b6 需要截圖，送小隊長初審；doc1 直接送 GM 終審；其他送大隊長終審
     const status = (bonusType === 'b5' || bonusType === 'b6') ? 'pending' : 'squad_approved';
 
     const { data, error } = await supabase

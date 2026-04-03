@@ -1,8 +1,156 @@
 import React from 'react';
-import { Settings, X, BarChart3, Save, Users, Lock, QrCode, AlertTriangle, Clapperboard } from 'lucide-react';
+import { Settings, X, BarChart3, Save, Users, Lock, QrCode, AlertTriangle, Clapperboard, Sliders, UserCog } from 'lucide-react';
 import { SystemSettings, CharacterStats, TopicHistory, TemporaryQuest, BonusApplication, AdminLog, Testimony, AngelCallPairingsData } from '@/types';
 
 import { ADMIN_PASSWORD, DAILY_QUEST_CONFIG, WEEKLY_QUEST_CONFIG } from '@/lib/constants';
+import { listAllMembers, transferMember, setMemberRole } from '@/app/actions/admin';
+
+interface MemberRow {
+    UserID: string;
+    Name: string;
+    Email?: string;
+    SquadName?: string;
+    TeamName?: string;
+    IsCaptain?: boolean;
+    IsCommandant?: boolean;
+    Level?: number;
+    Exp?: number;
+}
+
+function MemberManagementSection() {
+    const [members, setMembers] = React.useState<MemberRow[]>([]);
+    const [loading, setLoading] = React.useState(false);
+    const [search, setSearch] = React.useState('');
+    const [editingId, setEditingId] = React.useState<string | null>(null);
+    const [editSquad, setEditSquad] = React.useState('');
+    const [editTeam, setEditTeam] = React.useState('');
+    const [editRole, setEditRole] = React.useState<'captain' | 'commandant' | 'none'>('none');
+    const [saving, setSaving] = React.useState(false);
+    const [msg, setMsg] = React.useState('');
+
+    const load = async () => {
+        setLoading(true);
+        const res = await listAllMembers();
+        if (res.success) setMembers(res.members as MemberRow[]);
+        setLoading(false);
+    };
+
+    React.useEffect(() => { load(); }, []);
+
+    const filtered = search.trim()
+        ? members.filter(m =>
+            m.Name?.includes(search) ||
+            m.Email?.includes(search) ||
+            m.SquadName?.includes(search) ||
+            m.TeamName?.includes(search)
+        )
+        : members;
+
+    const startEdit = (m: MemberRow) => {
+        setEditingId(m.UserID);
+        setEditSquad(m.SquadName || '');
+        setEditTeam(m.TeamName || '');
+        setEditRole(m.IsCommandant ? 'commandant' : m.IsCaptain ? 'captain' : 'none');
+        setMsg('');
+    };
+
+    const handleSave = async (m: MemberRow) => {
+        setSaving(true); setMsg('');
+        const squadChanged = editSquad !== (m.SquadName || '') || editTeam !== (m.TeamName || '');
+        const roleChanged = editRole !== (m.IsCommandant ? 'commandant' : m.IsCaptain ? 'captain' : 'none');
+
+        if (squadChanged) {
+            const res = await transferMember(m.UserID, editSquad || null, editTeam || null);
+            if (!res.success) { setMsg(res.error || '轉隊失敗'); setSaving(false); return; }
+        }
+        if (roleChanged) {
+            const res = await setMemberRole(m.UserID, editRole);
+            if (!res.success) { setMsg(res.error || '角色更新失敗'); setSaving(false); return; }
+        }
+        setSaving(false);
+        setEditingId(null);
+        setMsg('已更新');
+        await load();
+    };
+
+    // Collect unique squad/team names for datalist
+    const squads = [...new Set(members.map(m => m.SquadName).filter(Boolean))];
+    const teams = [...new Set(members.map(m => m.TeamName).filter(Boolean))];
+
+    return (
+        <section className="space-y-6 md:col-span-2">
+            <div className="flex items-center gap-2 text-cyan-400 font-black text-sm uppercase tracking-widest"><UserCog size={16} /> 成員管理</div>
+            <div className="bg-slate-900 border-2 border-slate-800 p-6 rounded-4xl space-y-4 shadow-xl">
+                <div className="flex gap-2">
+                    <input
+                        placeholder="搜尋姓名 / 信箱 / 大隊 / 小隊"
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-cyan-500"
+                    />
+                    <button onClick={load} disabled={loading} className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold hover:bg-slate-700 disabled:opacity-50">
+                        {loading ? '…' : '重整'}
+                    </button>
+                </div>
+                {msg && <p className="text-xs text-center font-bold text-emerald-400">{msg}</p>}
+                <div className="max-h-[400px] overflow-y-auto space-y-1">
+                    <datalist id="dl-squads">{squads.map(s => <option key={s} value={s!} />)}</datalist>
+                    <datalist id="dl-teams">{teams.map(t => <option key={t} value={t!} />)}</datalist>
+                    {filtered.length === 0 && <p className="text-xs text-slate-500 text-center py-4">無符合成員</p>}
+                    {filtered.map(m => {
+                        const isEditing = editingId === m.UserID;
+                        return (
+                            <div key={m.UserID} className={`rounded-xl p-3 text-xs ${isEditing ? 'bg-cyan-950/40 border border-cyan-500/30' : 'bg-slate-950/50 border border-transparent hover:border-slate-700'}`}>
+                                <div className="flex items-center gap-2">
+                                    <span className="font-bold text-white w-16 truncate">{m.Name}</span>
+                                    <span className="text-slate-500 flex-1 truncate">{m.SquadName || '-'} / {m.TeamName || '-'}</span>
+                                    {m.IsCaptain && <span className="text-[10px] text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded-full">隊長</span>}
+                                    {m.IsCommandant && <span className="text-[10px] text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded-full">大隊長</span>}
+                                    <span className="text-slate-600 text-[10px]">Lv.{m.Level}</span>
+                                    {!isEditing && (
+                                        <button onClick={() => startEdit(m)} className="text-cyan-400 hover:text-cyan-300 text-[10px] font-bold shrink-0">編輯</button>
+                                    )}
+                                </div>
+                                {isEditing && (
+                                    <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 items-end">
+                                        <div>
+                                            <label className="text-[10px] text-slate-500 block mb-0.5">大隊</label>
+                                            <input list="dl-squads" value={editSquad} onChange={e => setEditSquad(e.target.value)}
+                                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs outline-none focus:border-cyan-500" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-slate-500 block mb-0.5">小隊</label>
+                                            <input list="dl-teams" value={editTeam} onChange={e => setEditTeam(e.target.value)}
+                                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs outline-none focus:border-cyan-500" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-slate-500 block mb-0.5">角色</label>
+                                            <select value={editRole} onChange={e => setEditRole(e.target.value as any)}
+                                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs outline-none focus:border-cyan-500">
+                                                <option value="none">一般學員</option>
+                                                <option value="captain">小隊長</option>
+                                                <option value="commandant">大隊長</option>
+                                            </select>
+                                        </div>
+                                        <div className="flex gap-1">
+                                            <button disabled={saving} onClick={() => handleSave(m)}
+                                                className="flex-1 py-1.5 bg-cyan-600 text-white rounded-lg font-bold text-[10px] hover:bg-cyan-500 disabled:opacity-50">
+                                                {saving ? '…' : '儲存'}
+                                            </button>
+                                            <button onClick={() => setEditingId(null)}
+                                                className="py-1.5 px-2 bg-slate-700 text-slate-300 rounded-lg text-[10px] hover:bg-slate-600">取消</button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+                <p className="text-[10px] text-slate-600 text-center">共 {members.length} 人{search && `，篩選結果 ${filtered.length} 人`}</p>
+            </div>
+        </section>
+    );
+}
 
 function LineRichMenuSection() {
     const [status, setStatus] = React.useState<'idle' | 'loading' | 'ok' | 'error'>('idle');
@@ -122,6 +270,23 @@ export function AdminDashboard({
         }
     );
     const [fineSettingsSaved, setFineSettingsSaved] = React.useState(false);
+
+    // Quest Reward & Disable State
+    const ALL_QUESTS = React.useMemo(() => [
+        { id: 'q1', title: '體運定課', defaultReward: 1000 },
+        { id: 'q1_dawn', title: '破曉體運', defaultReward: 2000 },
+        ...DAILY_QUEST_CONFIG.filter(q => q.id !== 'q1' && q.id !== 'r1').map(q => ({ id: q.id, title: q.title, defaultReward: q.reward })),
+        { id: 'r1', title: '關係定課', defaultReward: 2000 },
+        ...WEEKLY_QUEST_CONFIG.map(q => ({ id: q.id, title: q.title, defaultReward: q.reward })),
+    ], []);
+    const [rewardOverrides, setRewardOverrides] = React.useState<Record<string, number>>(
+        systemSettings.QuestRewardOverrides || {}
+    );
+    const [disabledQuests, setDisabledQuests] = React.useState<string[]>(
+        systemSettings.DisabledQuests || []
+    );
+    const [questSettingsSaved, setQuestSettingsSaved] = React.useState(false);
+    const disabledSet = new Set(disabledQuests);
 
     const handleImportSubmit = async (e: { preventDefault: () => void }) => {
         e.preventDefault();
@@ -285,6 +450,71 @@ export function AdminDashboard({
                         </div>
                     </section>
 
+                    {/* ── 定課分值 & 啟停控制 ── */}
+                    <section className="space-y-6 md:col-span-2">
+                        <div className="flex items-center gap-2 text-emerald-400 font-black text-sm uppercase tracking-widest"><Sliders size={16} /> 定課分值 & 啟停管理</div>
+                        <div className="bg-slate-900 border-2 border-slate-800 p-8 rounded-4xl space-y-4 shadow-xl">
+                            <p className="text-xs text-slate-400">調整各定課基礎分數（留空＝使用預設值），或停用不需要的定課。</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[420px] overflow-y-auto pr-1">
+                                {ALL_QUESTS.map(q => {
+                                    const isDisabled = disabledSet.has(q.id);
+                                    return (
+                                        <div key={q.id} className={`flex items-center gap-2 p-3 rounded-xl border transition-colors ${isDisabled ? 'bg-slate-950 border-slate-800 opacity-50' : 'bg-slate-950/50 border-slate-700/50'}`}>
+                                            <input
+                                                type="checkbox"
+                                                checked={!isDisabled}
+                                                onChange={() => {
+                                                    setDisabledQuests(prev =>
+                                                        prev.includes(q.id) ? prev.filter(id => id !== q.id) : [...prev, q.id]
+                                                    );
+                                                    setQuestSettingsSaved(false);
+                                                }}
+                                                className="accent-emerald-500 w-4 h-4 shrink-0"
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                                <span className="text-xs font-bold text-slate-300 block truncate">{q.id} {q.title}</span>
+                                            </div>
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                step={100}
+                                                placeholder={String(q.defaultReward)}
+                                                value={rewardOverrides[q.id] ?? ''}
+                                                onChange={e => {
+                                                    const val = e.target.value;
+                                                    setRewardOverrides(prev => {
+                                                        const next = { ...prev };
+                                                        if (val === '' || Number(val) === q.defaultReward) {
+                                                            delete next[q.id];
+                                                        } else {
+                                                            next[q.id] = Number(val);
+                                                        }
+                                                        return next;
+                                                    });
+                                                    setQuestSettingsSaved(false);
+                                                }}
+                                                disabled={isDisabled}
+                                                className="w-20 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs font-bold text-right outline-none focus:border-emerald-500 disabled:opacity-30 placeholder:text-slate-600"
+                                            />
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            <button
+                                onClick={() => {
+                                    updateGlobalSetting('QuestRewardOverrides', JSON.stringify(rewardOverrides));
+                                    updateGlobalSetting('DisabledQuests', JSON.stringify(disabledQuests));
+                                    setQuestSettingsSaved(true);
+                                }}
+                                className="w-full bg-emerald-700 p-4 rounded-2xl text-white font-black shadow-lg hover:bg-emerald-600 transition-colors"
+                            >
+                                <Save size={18} className="inline mr-2" />
+                                儲存定課設定
+                            </button>
+                            {questSettingsSaved && <p className="text-xs text-emerald-400 font-bold text-center mt-2">定課設定已更新</p>}
+                        </div>
+                    </section>
+
                     <section className="space-y-6">
                         <div className="flex items-center gap-2 text-orange-500 font-black text-sm uppercase tracking-widest"><Settings size={16} /> 每週任務管理</div>
                         <div className="bg-slate-900 border-2 border-slate-800 p-8 rounded-4xl space-y-6 shadow-xl text-center">
@@ -390,6 +620,8 @@ export function AdminDashboard({
                             </form>
                         </div>
                     </section>
+
+                    <MemberManagementSection />
 
                     <section className="space-y-6">
                         <div className="flex items-center gap-2 text-orange-500 font-black text-sm uppercase tracking-widest"><Settings size={16} /> 臨時加分任務管理</div>

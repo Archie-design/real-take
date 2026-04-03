@@ -23,8 +23,10 @@ interface WeeklyTopicTabProps {
     bonusApplications: BonusApplication[];
     onCheckIn: (q: Quest) => void;
     onUndo: (q: Quest) => void;
-    onSubmitInterview: (data: { interviewTarget: string; interviewDate: string; description: string }) => Promise<void>;
+    onSubmitInterview: (data: { interviewTarget: string; interviewDate: string; description: string; bonusType?: 'b1' | 'b2' }) => Promise<void>;
     onSubmitBonusApp: (type: 'b3' | 'b4' | 'b5' | 'b6' | 'b7', target: string, date: string, desc: string, screenshotUrl?: string) => Promise<void>;
+    questRewardOverrides?: Record<string, number>;
+    disabledQuests?: string[];
 }
 
 const BONUS_CONFIG: Array<{
@@ -99,10 +101,10 @@ function WeekCalendarRow({
                             onClick={() => isDone ? onUndo(questId, d) : onCheckIn(questId, d)}
                             className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all
                                 ${isDone
-                                    ? 'bg-[#E50914] text-white shadow-lg'
+                                    ? 'bg-[#C0392B] text-white shadow-lg'
                                     : isDisabled
-                                        ? 'bg-[#222] text-gray-600 cursor-not-allowed'
-                                        : 'bg-[#222] text-gray-500 hover:bg-[#333] active:scale-90'}`}
+                                        ? 'bg-[#16213E] text-gray-600 cursor-not-allowed'
+                                        : 'bg-[#16213E] text-gray-500 hover:bg-[#253A5C] active:scale-90'}`}
                         >
                             {dayLabel}
                         </button>
@@ -127,9 +129,17 @@ export function WeeklyTopicTab({
     onUndo,
     onSubmitInterview,
     onSubmitBonusApp,
+    questRewardOverrides,
+    disabledQuests,
 }: WeeklyTopicTabProps) {
     // ── 當前電影主題週期 ──
     const themePeriod = getCurrentThemePeriod();
+
+    // ── 動態分值覆寫與停用過濾 ──
+    const disabledSet = new Set(disabledQuests || []);
+    const weeklyQuests = WEEKLY_QUEST_CONFIG
+        .filter(q => !disabledSet.has(q.id))
+        .map(q => questRewardOverrides?.[q.id] != null ? { ...q, reward: questRewardOverrides[q.id] } : q);
 
     // ── 傳愛申請 state ──
     const [showW4Form, setShowW4Form] = useState(false);
@@ -160,6 +170,7 @@ export function WeeklyTopicTab({
             interviewTarget: w4Target,
             interviewDate: w4Date,
             description: `[${w4BonusType === 'b2' ? '訂金5千以上' : '訂金5千以下'}] ${w4Desc}`.trim(),
+            bonusType: w4BonusType,
         });
         setIsSubmittingW4(false);
         setShowW4Form(false);
@@ -241,11 +252,11 @@ export function WeeklyTopicTab({
     const countThisWeek = (qId: string) =>
         logs.filter(l => l.QuestID.startsWith(qId + '|') && new Date(l.Timestamp) >= currentWeeklyMonday).length;
 
-    const a1Quest = WEEKLY_QUEST_CONFIG.find(q => q.id === 'a1')!;
-    const w1Quest = WEEKLY_QUEST_CONFIG.find(q => q.id === 'w1')!;
-    const w2Quest = WEEKLY_QUEST_CONFIG.find(q => q.id === 'w2')!;
-    const w3Quest = WEEKLY_QUEST_CONFIG.find(q => q.id === 'w3')!;
-    const w4Quest = WEEKLY_QUEST_CONFIG.find(q => q.id === 'w4')!;
+    const a1Quest = weeklyQuests.find(q => q.id === 'a1');
+    const w1Quest = weeklyQuests.find(q => q.id === 'w1');
+    const w2Quest = weeklyQuests.find(q => q.id === 'w2');
+    const w3Quest = weeklyQuests.find(q => q.id === 'w3');
+    const w4Quest = weeklyQuests.find(q => q.id === 'w4');
 
     const a1Count = countThisWeek('a1');
     const w1Count = countThisWeek('w1');
@@ -274,16 +285,16 @@ export function WeeklyTopicTab({
             <section className="space-y-3">
                 <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">當前電影主題</h2>
                 <div className={`p-4 rounded-3xl border flex items-center gap-4 ${
-                    themePeriod.type === 'regular' ? 'bg-[#111] border-[#D4AF37]/30'
-                    : themePeriod.type === 'reflection' ? 'bg-[#D4AF37]/5 border-[#D4AF37]/40'
-                    : 'bg-[#111] border-[#333]'
+                    themePeriod.type === 'regular' ? 'bg-[#1B2A4A] border-[#F5C842]/30'
+                    : themePeriod.type === 'reflection' ? 'bg-[#F5C842]/5 border-[#F5C842]/40'
+                    : 'bg-[#1B2A4A] border-[#253A5C]'
                 }`}>
                     <div className="w-12 h-12 rounded-2xl bg-black/50 flex items-center justify-center text-white/60 shrink-0"><Film size={28} /></div>
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                             <p className="font-black text-white text-sm">《{themePeriod.movie}》</p>
                             <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${
-                                themePeriod.type === 'reflection' ? 'bg-[#D4AF37] text-black' : 'bg-[#E50914] text-white'
+                                themePeriod.type === 'reflection' ? 'bg-[#F5C842] text-black' : 'bg-[#C0392B] text-white'
                             }`}>{themePeriod.weeks}</span>
                         </div>
                         <p className="text-[10px] text-gray-500 mt-0.5 leading-relaxed">{themePeriod.desc}</p>
@@ -295,11 +306,11 @@ export function WeeklyTopicTab({
             {themePeriod.taskType === 't3' && t3Base && (
                 <section className="space-y-3">
                     <div className="flex justify-between items-center px-1">
-                        <h2 className="text-[10px] font-black text-[#D4AF37] uppercase tracking-widest">沉澱週分享任務</h2>
-                        <span className={`text-[10px] font-bold ${t3Count >= 3 ? 'text-[#E50914]' : 'text-gray-600'}`}>{t3Count} / 3 則</span>
+                        <h2 className="text-[10px] font-black text-[#F5C842] uppercase tracking-widest">沉澱週分享任務</h2>
+                        <span className={`text-[10px] font-bold ${t3Count >= 3 ? 'text-[#C0392B]' : 'text-gray-600'}`}>{t3Count} / 3 則</span>
                     </div>
                     <div className={`p-5 rounded-3xl border space-y-4 relative overflow-hidden ${
-                        t3Count >= 3 ? 'opacity-60 bg-[#D4AF37]/10 border-[#D4AF37]/30' : (isFineItem('t3') ? 'bg-red-950/10 border-red-500/20' : 'bg-[#D4AF37]/10 border-[#D4AF37]/30')
+                        t3Count >= 3 ? 'opacity-60 bg-[#F5C842]/10 border-[#F5C842]/30' : (isFineItem('t3') ? 'bg-red-950/10 border-red-500/20' : 'bg-[#F5C842]/10 border-[#F5C842]/30')
                     }`}>
                         {isFineItem('t3') && t3Count < 1 && (
                             <div className="absolute top-0 right-0 px-3 py-1 bg-red-600/20 border-l border-b border-red-500/30 rounded-bl-xl flex items-center gap-1">
@@ -312,7 +323,7 @@ export function WeeklyTopicTab({
                             <div className="flex-1">
                                 <p className="font-bold text-white text-sm">沉澱週分享</p>
                                 <p className="text-[10px] text-gray-400">{themePeriod.desc}</p>
-                                <p className="text-[10px] text-[#D4AF37] mt-0.5">+{themePeriod.t3Reward} / 則，最多 3 則</p>
+                                <p className="text-[10px] text-[#F5C842] mt-0.5">+{themePeriod.t3Reward} / 則，最多 3 則</p>
                             </div>
                         </div>
                         <div className="flex justify-between items-center">
@@ -332,7 +343,7 @@ export function WeeklyTopicTab({
                                                 ? onUndo({ id: qId, title: '沉澱週分享', reward: themePeriod.t3Reward })
                                                 : onCheckIn({ id: qId, title: '沉澱週分享', reward: themePeriod.t3Reward })}
                                             className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all
-                                                ${isDone ? 'bg-[#D4AF37] text-black' : isCapped ? 'bg-[#222] text-gray-600 cursor-not-allowed' : 'bg-[#222] text-gray-500 hover:bg-[#333] active:scale-90'}`}
+                                                ${isDone ? 'bg-[#F5C842] text-black' : isCapped ? 'bg-[#16213E] text-gray-600 cursor-not-allowed' : 'bg-[#16213E] text-gray-500 hover:bg-[#253A5C] active:scale-90'}`}
                                         >{day}</button>
                                     </div>
                                 );
@@ -345,15 +356,15 @@ export function WeeklyTopicTab({
             {/* ── 個人主題影展（t1）── */}
             <section className="space-y-3">
                 <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">個人主題任務</h2>
-                <div className={`p-5 rounded-3xl border-2 ${isTopicDone ? 'border-[#D4AF37]/60 bg-[#D4AF37]/5' : 'border-[#D4AF37]/30 bg-[#111]'} shadow-xl`}>
+                <div className={`p-5 rounded-3xl border-2 ${isTopicDone ? 'border-[#F5C842]/60 bg-[#F5C842]/5' : 'border-[#F5C842]/30 bg-[#1B2A4A]'} shadow-xl`}>
                     <div className="flex items-center gap-4 mb-4">
                         <div className="w-12 h-12 rounded-2xl bg-black/50 flex items-center justify-center text-white/60 shrink-0"><Clapperboard size={28} /></div>
                         <div className="flex-1">
-                            <span className="text-[9px] font-black bg-[#D4AF37] text-black px-2 py-0.5 rounded-full uppercase">主題影展</span>
+                            <span className="text-[9px] font-black bg-[#F5C842] text-black px-2 py-0.5 rounded-full uppercase">主題影展</span>
                             <h3 className="text-lg font-black text-white mt-1 italic">「{systemSettings.TopicQuestTitle}」</h3>
                         </div>
                         <div className="text-right">
-                            <p className="font-black text-[#D4AF37]">+1,000</p>
+                            <p className="font-black text-[#F5C842]">+1,000</p>
                             <p className="text-[10px] text-gray-500">計劃完成</p>
                         </div>
                     </div>
@@ -364,7 +375,7 @@ export function WeeklyTopicTab({
                         className={`w-full py-3.5 rounded-2xl font-black text-sm transition-all active:scale-95
                             ${isTopicDone
                                 ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-600/30'
-                                : 'bg-[#D4AF37] text-black shadow-lg shadow-[0_0_15px_rgba(212,175,55,0.3)]'}`}
+                                : 'bg-[#F5C842] text-black shadow-lg shadow-[0_0_15px_rgba(212,175,55,0.3)]'}`}
                     >
                         {isTopicDone ? '✓ 已完成計劃（點擊取消）' : <span className="flex items-center justify-center gap-1.5"><Ticket size={14} />完成計劃 / 解盤</span>}
                     </button>
@@ -381,7 +392,7 @@ export function WeeklyTopicTab({
                             <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">每日親證打卡</h2>
                             <span className="text-[10px] text-gray-600">+{t2Config.reward} / 日</span>
                         </div>
-                        <div className="p-5 rounded-3xl bg-[#111] border border-[#333]">
+                        <div className="p-5 rounded-3xl bg-[#1B2A4A] border border-[#253A5C]">
                             <WeekCalendarRow
                                 questId="t2"
                                 logs={logs}
@@ -400,10 +411,10 @@ export function WeeklyTopicTab({
             <section className="space-y-3">
                 <div className="flex justify-between items-center px-1">
                     <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">天使通話</h2>
-                    <span className={`text-[10px] font-bold ${a1Count >= 3 ? 'text-[#E50914]' : 'text-gray-600'}`}>{a1Count} / 3 次</span>
+                    <span className={`text-[10px] font-bold ${a1Count >= 3 ? 'text-[#C0392B]' : 'text-gray-600'}`}>{a1Count} / 3 次</span>
                 </div>
                 <div className={`p-5 rounded-3xl border space-y-4 relative overflow-hidden ${
-                    a1Count >= 3 ? 'opacity-60 bg-[#111] border-[#333]' : (isFineItem('a1') ? 'bg-red-950/10 border-red-500/20' : 'bg-[#111] border-[#333]')
+                    a1Count >= 3 ? 'opacity-60 bg-[#1B2A4A] border-[#253A5C]' : (isFineItem('a1') ? 'bg-red-950/10 border-red-500/20' : 'bg-[#1B2A4A] border-[#253A5C]')
                 }`}>
                     {isFineItem('a1') && a1Count < 1 && (
                         <div className="absolute top-0 right-0 px-3 py-1 bg-red-600/20 border-l border-b border-red-500/30 rounded-bl-xl flex items-center gap-1">
@@ -411,6 +422,7 @@ export function WeeklyTopicTab({
                             <span className="text-[10px] font-black text-red-500 uppercase tracking-tighter">本週必修罰款</span>
                         </div>
                     )}
+                    {a1Quest && (<>
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-black/40 flex items-center justify-center text-white/70 shrink-0"><Phone size={22} /></div>
                         <div className="flex-1">
@@ -427,17 +439,18 @@ export function WeeklyTopicTab({
                         onCheckIn={(_, day) => onCheckIn({ ...a1Quest, id: `a1|${getLogicalDateStr(day)}` })}
                         onUndo={(_, day) => onUndo({ ...a1Quest, id: `a1|${getLogicalDateStr(day)}` })}
                     />
+                    </>)}
                 </div>
             </section>
 
             {/* ── w1：親證分享（每週最多 1 則）── */}
-            <section className="space-y-3">
+            {w1Quest && <section className="space-y-3">
                 <div className="flex justify-between items-center px-1">
                     <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">親證分享</h2>
-                    <span className={`text-[10px] font-bold ${w1Count >= 1 ? 'text-[#E50914]' : 'text-gray-600'}`}>{w1Count} / 1 則</span>
+                    <span className={`text-[10px] font-bold ${w1Count >= 1 ? 'text-[#C0392B]' : 'text-gray-600'}`}>{w1Count} / 1 則</span>
                 </div>
                 <div className={`p-5 rounded-3xl border space-y-4 relative overflow-hidden ${
-                    w1Count >= 1 ? 'opacity-60 bg-[#111] border-[#333]' : (isFineItem('w1') ? 'bg-red-950/10 border-red-500/20' : 'bg-[#111] border-[#333]')
+                    w1Count >= 1 ? 'opacity-60 bg-[#1B2A4A] border-[#253A5C]' : (isFineItem('w1') ? 'bg-red-950/10 border-red-500/20' : 'bg-[#1B2A4A] border-[#253A5C]')
                 }`}>
                     {isFineItem('w1') && w1Count < 1 && (
                         <div className="absolute top-0 right-0 px-3 py-1 bg-red-600/20 border-l border-b border-red-500/30 rounded-bl-xl flex items-center gap-1">
@@ -461,16 +474,16 @@ export function WeeklyTopicTab({
                         {...makeWeekHandler('w1', w1Quest)}
                     />
                 </div>
-            </section>
+            </section>}
 
             {/* ── w2：欣賞／肯定夥伴（每週最多 3 則，各不同人）── */}
-            <section className="space-y-3">
+            {w2Quest && <section className="space-y-3">
                 <div className="flex justify-between items-center px-1">
                     <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">欣賞／肯定夥伴</h2>
-                    <span className={`text-[10px] font-bold ${w2Count >= 3 ? 'text-[#E50914]' : 'text-gray-600'}`}>{w2Count} / 3 則</span>
+                    <span className={`text-[10px] font-bold ${w2Count >= 3 ? 'text-[#C0392B]' : 'text-gray-600'}`}>{w2Count} / 3 則</span>
                 </div>
                 <div className={`p-5 rounded-3xl border space-y-4 relative overflow-hidden ${
-                    w2Count >= 3 ? 'opacity-60 bg-[#111] border-[#333]' : (isFineItem('w2') ? 'bg-red-950/10 border-red-500/20' : 'bg-[#111] border-[#333]')
+                    w2Count >= 3 ? 'opacity-60 bg-[#1B2A4A] border-[#253A5C]' : (isFineItem('w2') ? 'bg-red-950/10 border-red-500/20' : 'bg-[#1B2A4A] border-[#253A5C]')
                 }`}>
                     {isFineItem('w2') && w2Count < 1 && (
                         <div className="absolute top-0 right-0 px-3 py-1 bg-red-600/20 border-l border-b border-red-500/30 rounded-bl-xl flex items-center gap-1">
@@ -494,16 +507,16 @@ export function WeeklyTopicTab({
                         {...makeWeekHandler('w2', w2Quest)}
                     />
                 </div>
-            </section>
+            </section>}
 
             {/* ── w3：小隊定聚（每月最多 2 次）+ 主題任務 ── */}
-            <section className="space-y-3">
+            {w3Quest && <section className="space-y-3">
                 <div className="flex justify-between items-center px-1">
                     <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">小隊定聚</h2>
-                    <span className={`text-[10px] font-bold ${w3CountMonth >= 2 ? 'text-[#E50914]' : 'text-gray-600'}`}>{w3CountMonth} / 2 次（本月）</span>
+                    <span className={`text-[10px] font-bold ${w3CountMonth >= 2 ? 'text-[#C0392B]' : 'text-gray-600'}`}>{w3CountMonth} / 2 次（本月）</span>
                 </div>
                 <div className={`p-5 rounded-3xl border space-y-5 relative overflow-hidden ${
-                    w3CountMonth >= 2 ? 'opacity-60 bg-[#111] border-[#333]' : (isFineItem('w3') ? 'bg-red-950/10 border-red-500/20' : 'bg-[#111] border-[#333]')
+                    w3CountMonth >= 2 ? 'opacity-60 bg-[#1B2A4A] border-[#253A5C]' : (isFineItem('w3') ? 'bg-red-950/10 border-red-500/20' : 'bg-[#1B2A4A] border-[#253A5C]')
                 }`}>
                     {isFineItem('w3') && w3CountMonth < 1 && (
                         <div className="absolute top-0 right-0 px-3 py-1 bg-red-600/20 border-l border-b border-red-500/30 rounded-bl-xl flex items-center gap-1">
@@ -537,28 +550,28 @@ export function WeeklyTopicTab({
                                     onClick={() => setSelectedTheme(selectedTheme === theme.id ? null : theme.id)}
                                     className={`p-3 rounded-2xl border text-left transition-all
                                         ${selectedTheme === theme.id
-                                            ? 'border-[#D4AF37] bg-[#D4AF37]/10'
-                                            : 'border-[#333] bg-black hover:border-[#555]'}`}
+                                            ? 'border-[#F5C842] bg-[#F5C842]/10'
+                                            : 'border-[#253A5C] bg-black hover:border-[#555]'}`}
                                 >
                                     <div className="flex items-center gap-2 mb-1">
                                         {(() => {
                                             const TIcon = SQUAD_THEME_ICON_MAP[theme.id];
                                             return TIcon
-                                                ? <TIcon size={16} className={selectedTheme === theme.id ? 'text-[#D4AF37]' : 'text-white/60'} />
+                                                ? <TIcon size={16} className={selectedTheme === theme.id ? 'text-[#F5C842]' : 'text-white/60'} />
                                                 : <span className="text-xl">{theme.icon}</span>;
                                         })()}
-                                        <span className={`font-black text-xs ${selectedTheme === theme.id ? 'text-[#D4AF37]' : 'text-white'}`}>{theme.title}</span>
+                                        <span className={`font-black text-xs ${selectedTheme === theme.id ? 'text-[#F5C842]' : 'text-white'}`}>{theme.title}</span>
                                     </div>
                                     <p className="text-[9px] text-gray-500">{theme.attr}</p>
-                                    <p className="text-[10px] text-[#D4AF37] font-bold mt-1">+{theme.reward.toLocaleString()} (+{theme.bonusFull.toLocaleString()} 全員)</p>
+                                    <p className="text-[10px] text-[#F5C842] font-bold mt-1">+{theme.reward.toLocaleString()} (+{theme.bonusFull.toLocaleString()} 全員)</p>
                                 </button>
                             ))}
                         </div>
                         {selectedTheme && (() => {
                             const theme = SQUAD_THEME_CONFIG.find(t => t.id === selectedTheme)!;
                             return (
-                                <div className="p-3 rounded-2xl bg-[#D4AF37]/10 border border-[#D4AF37]/30 space-y-2">
-                                    <div className="flex items-center gap-1.5 text-xs text-[#D4AF37] font-bold">
+                                <div className="p-3 rounded-2xl bg-[#F5C842]/10 border border-[#F5C842]/30 space-y-2">
+                                    <div className="flex items-center gap-1.5 text-xs text-[#F5C842] font-bold">
                                         {(() => {
                                             const TIcon = SQUAD_THEME_ICON_MAP[theme.id];
                                             return TIcon ? <TIcon size={13} /> : <span>{theme.icon}</span>;
@@ -569,13 +582,13 @@ export function WeeklyTopicTab({
                                     <div className="flex gap-2">
                                         <button
                                             onClick={() => onCheckIn({ id: theme.id, title: `${theme.title} 主題定聚`, reward: theme.reward })}
-                                            className="flex-1 py-2 bg-[#D4AF37] text-black font-black rounded-xl text-xs active:scale-95 transition-all"
+                                            className="flex-1 py-2 bg-[#F5C842] text-black font-black rounded-xl text-xs active:scale-95 transition-all"
                                         >
                                             +{theme.reward.toLocaleString()} 主題積分
                                         </button>
                                         <button
                                             onClick={() => onCheckIn({ id: `${theme.id}_full`, title: `${theme.title} 全員到齊`, reward: theme.bonusFull })}
-                                            className="flex-1 py-2 bg-[#333] text-white font-bold rounded-xl text-xs active:scale-95 transition-all hover:bg-[#444]"
+                                            className="flex-1 py-2 bg-[#253A5C] text-white font-bold rounded-xl text-xs active:scale-95 transition-all hover:bg-[#444]"
                                         >
                                             +{theme.bonusFull.toLocaleString()} 全員加成
                                         </button>
@@ -585,16 +598,16 @@ export function WeeklyTopicTab({
                         })()}
                     </div>
                 </div>
-            </section>
+            </section>}
 
             {/* ── w4：小隊通話（每月最多 2 次）── */}
-            <section className="space-y-3">
+            {w4Quest && <section className="space-y-3">
                 <div className="flex justify-between items-center px-1">
                     <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">小隊通話</h2>
-                    <span className={`text-[10px] font-bold ${w4CountMonth >= 2 ? 'text-[#E50914]' : 'text-gray-600'}`}>{w4CountMonth} / 2 次（本月）</span>
+                    <span className={`text-[10px] font-bold ${w4CountMonth >= 2 ? 'text-[#C0392B]' : 'text-gray-600'}`}>{w4CountMonth} / 2 次（本月）</span>
                 </div>
                 <div className={`p-5 rounded-3xl border space-y-4 relative overflow-hidden ${
-                    w4CountMonth >= 2 ? 'opacity-60 bg-[#111] border-[#333]' : (isFineItem('w4') ? 'bg-red-950/10 border-red-500/20' : 'bg-[#111] border-[#333]')
+                    w4CountMonth >= 2 ? 'opacity-60 bg-[#1B2A4A] border-[#253A5C]' : (isFineItem('w4') ? 'bg-red-950/10 border-red-500/20' : 'bg-[#1B2A4A] border-[#253A5C]')
                 }`}>
                     {isFineItem('w4') && w4CountMonth < 1 && (
                         <div className="absolute top-0 right-0 px-3 py-1 bg-red-600/20 border-l border-b border-red-500/30 rounded-bl-xl flex items-center gap-1">
@@ -618,12 +631,12 @@ export function WeeklyTopicTab({
                         {...makeWeekHandler('w4', w4Quest)}
                     />
                 </div>
-            </section>
+            </section>}
 
             {/* ── 傳愛系統（b1/b2）── */}
             <section className="space-y-3">
                 <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">傳愛加分</h2>
-                <div className="p-5 rounded-3xl bg-[#111] border border-[#E50914]/20 shadow-xl space-y-4">
+                <div className="p-5 rounded-3xl bg-[#1B2A4A] border border-[#C0392B]/20 shadow-xl space-y-4">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-black/40 flex items-center justify-center text-white/70 shrink-0"><Megaphone size={22} /></div>
                         <div className="flex-1">
@@ -635,7 +648,7 @@ export function WeeklyTopicTab({
                     {!showW4Form ? (
                         <button
                             onClick={() => setShowW4Form(true)}
-                            className="w-full py-3.5 rounded-2xl font-black text-sm bg-[#E50914] text-white shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5"
+                            className="w-full py-3.5 rounded-2xl font-black text-sm bg-[#C0392B] text-white shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5"
                         >
                             <Ticket size={14} />提交傳愛申請
                         </button>
@@ -645,7 +658,7 @@ export function WeeklyTopicTab({
                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">被介紹對象 *</label>
                                 <input required value={w4Target} onChange={e => setW4Target(e.target.value)}
                                     placeholder="例：王小明"
-                                    className="w-full mt-1 bg-[#222] border border-[#333] rounded-2xl p-3.5 text-white font-bold outline-none focus:border-[#E50914] text-sm" />
+                                    className="w-full mt-1 bg-[#16213E] border border-[#253A5C] rounded-2xl p-3.5 text-white font-bold outline-none focus:border-[#C0392B] text-sm" />
                             </div>
                             <div>
                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">訂金金額</label>
@@ -654,7 +667,7 @@ export function WeeklyTopicTab({
                                         <button key={type} type="button"
                                             onClick={() => setW4BonusType(type)}
                                             className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-all
-                                                ${w4BonusType === type ? 'bg-[#E50914] text-white' : 'bg-[#222] text-gray-400 hover:bg-[#333]'}`}
+                                                ${w4BonusType === type ? 'bg-[#C0392B] text-white' : 'bg-[#16213E] text-gray-400 hover:bg-[#253A5C]'}`}
                                         >
                                             {type === 'b1' ? '5千以下 +100' : '5千以上 +200'}
                                         </button>
@@ -664,19 +677,19 @@ export function WeeklyTopicTab({
                             <div>
                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">日期 *</label>
                                 <input required type="date" value={w4Date} onChange={e => setW4Date(e.target.value)}
-                                    className="w-full mt-1 bg-[#222] border border-[#333] rounded-2xl p-3.5 text-white font-bold outline-none focus:border-[#E50914] text-sm" />
+                                    className="w-full mt-1 bg-[#16213E] border border-[#253A5C] rounded-2xl p-3.5 text-white font-bold outline-none focus:border-[#C0392B] text-sm" />
                             </div>
                             <div>
                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">簡述（選填）</label>
                                 <textarea value={w4Desc} onChange={e => setW4Desc(e.target.value)}
                                     rows={2} placeholder="簡述推薦情況…"
-                                    className="w-full mt-1 bg-[#222] border border-[#333] rounded-2xl p-3.5 text-white font-bold outline-none focus:border-[#E50914] text-sm resize-none" />
+                                    className="w-full mt-1 bg-[#16213E] border border-[#253A5C] rounded-2xl p-3.5 text-white font-bold outline-none focus:border-[#C0392B] text-sm resize-none" />
                             </div>
                             <div className="flex gap-2">
                                 <button type="button" onClick={() => setShowW4Form(false)}
-                                    className="flex-1 py-3 bg-[#222] text-gray-400 font-bold rounded-2xl text-sm">取消</button>
+                                    className="flex-1 py-3 bg-[#16213E] text-gray-400 font-bold rounded-2xl text-sm">取消</button>
                                 <button type="submit" disabled={isSubmittingW4}
-                                    className="flex-1 py-3 bg-[#E50914] text-white font-black rounded-2xl text-sm active:scale-95 transition-all disabled:opacity-50">
+                                    className="flex-1 py-3 bg-[#C0392B] text-white font-black rounded-2xl text-sm active:scale-95 transition-all disabled:opacity-50">
                                     {isSubmittingW4 ? '提交中…' : '確認送出'}
                                 </button>
                             </div>
@@ -684,12 +697,12 @@ export function WeeklyTopicTab({
                     )}
 
                     {bonusApplications.filter((a: BonusApplication) => a.quest_id.startsWith('w4|')).length > 0 && (
-                        <div className="space-y-2 pt-2 border-t border-[#333]">
+                        <div className="space-y-2 pt-2 border-t border-[#253A5C]">
                             <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">申請記錄</p>
                             {bonusApplications.filter((a: BonusApplication) => a.quest_id.startsWith('w4|')).map((app: BonusApplication) => {
                                 const si = BONUS_STATUS_LABELS[app.status] ?? { label: app.status, color: 'text-gray-400' };
                                 return (
-                                    <div key={app.id} className="bg-[#222] rounded-2xl p-3.5 space-y-1">
+                                    <div key={app.id} className="bg-[#16213E] rounded-2xl p-3.5 space-y-1">
                                         <div className="flex justify-between items-start">
                                             <div>
                                                 <p className="font-bold text-white text-sm">{app.interview_target}</p>
@@ -699,7 +712,7 @@ export function WeeklyTopicTab({
                                         </div>
                                         {app.description && <p className="text-[10px] text-gray-400 italic">{app.description}</p>}
                                         {app.status === 'rejected' && (app.final_review_notes || app.squad_review_notes) && (
-                                            <p className="text-[10px] text-[#E50914] font-bold">駁回原因：{app.final_review_notes || app.squad_review_notes}</p>
+                                            <p className="text-[10px] text-[#C0392B] font-bold">駁回原因：{app.final_review_notes || app.squad_review_notes}</p>
                                         )}
                                     </div>
                                 );
@@ -723,9 +736,9 @@ export function WeeklyTopicTab({
 
                         return (
                             <div key={cfg.id} className={`rounded-2xl border p-4 space-y-3 transition-all ${
-                                isApproved ? 'bg-[#E50914]/10 border-[#E50914]/30 opacity-60'
+                                isApproved ? 'bg-[#C0392B]/10 border-[#C0392B]/30 opacity-60'
                                 : isPending ? 'bg-yellow-500/5 border-yellow-500/20'
-                                : 'bg-[#111] border-[#222]'
+                                : 'bg-[#1B2A4A] border-[#16213E]'
                             }`}>
                                 <div className="flex items-center gap-3">
                                     {(() => {
@@ -735,13 +748,13 @@ export function WeeklyTopicTab({
                                             : <span className="text-2xl shrink-0">{cfg.icon}</span>;
                                     })()}
                                     <div className="flex-1 min-w-0">
-                                        <p className={`font-bold text-sm ${isApproved ? 'text-[#E50914]' : 'text-white'}`}>{cfg.title}</p>
+                                        <p className={`font-bold text-sm ${isApproved ? 'text-[#C0392B]' : 'text-white'}`}>{cfg.title}</p>
                                         <p className="text-[10px] text-gray-500">{cfg.sub}</p>
                                     </div>
                                     <div className="text-right shrink-0">
-                                        <p className={`font-black text-sm ${isApproved ? 'text-[#E50914]' : 'text-[#D4AF37]'}`}>+{cfg.reward.toLocaleString()}</p>
+                                        <p className={`font-black text-sm ${isApproved ? 'text-[#C0392B]' : 'text-[#F5C842]'}`}>+{cfg.reward.toLocaleString()}</p>
                                         {isPending && <p className="text-[9px] text-yellow-400 font-bold">審核中</p>}
-                                        {isApproved && <p className="text-[9px] text-[#E50914] font-bold">已入帳</p>}
+                                        {isApproved && <p className="text-[9px] text-[#C0392B] font-bold">已入帳</p>}
                                     </div>
                                 </div>
 
@@ -751,7 +764,7 @@ export function WeeklyTopicTab({
                                         {!isOpen ? (
                                             <button
                                                 onClick={() => { setActiveBonusForm(cfg.id); setBonusDate(getLogicalDateStr(new Date())); }}
-                                                className="w-full py-2.5 rounded-xl bg-[#222] border border-[#333] text-gray-400 font-bold text-xs hover:border-[#D4AF37]/50 hover:text-[#D4AF37] transition-colors"
+                                                className="w-full py-2.5 rounded-xl bg-[#16213E] border border-[#253A5C] text-gray-400 font-bold text-xs hover:border-[#F5C842]/50 hover:text-[#F5C842] transition-colors"
                                             >
                                                 + 提交申請
                                             </button>
@@ -762,7 +775,7 @@ export function WeeklyTopicTab({
                                                         required
                                                         value={bonusTarget}
                                                         onChange={e => setBonusTarget(e.target.value)}
-                                                        className="w-full bg-[#222] border border-[#333] rounded-xl px-3 py-2.5 text-white text-sm font-bold outline-none focus:border-[#D4AF37] appearance-none cursor-pointer"
+                                                        className="w-full bg-[#16213E] border border-[#253A5C] rounded-xl px-3 py-2.5 text-white text-sm font-bold outline-none focus:border-[#F5C842] appearance-none cursor-pointer"
                                                     >
                                                         <option value="">選擇報名課程…</option>
                                                         {B3_OPTIONS.map(option => (
@@ -775,7 +788,7 @@ export function WeeklyTopicTab({
                                                         value={bonusTarget}
                                                         onChange={e => setBonusTarget(e.target.value)}
                                                         placeholder={cfg.id === 'b7' ? '課程名稱' : cfg.id === 'b4' ? '小天使編號或說明' : '說明'}
-                                                        className="w-full bg-[#222] border border-[#333] rounded-xl px-3 py-2.5 text-white text-sm font-bold outline-none focus:border-[#D4AF37] placeholder:text-gray-600"
+                                                        className="w-full bg-[#16213E] border border-[#253A5C] rounded-xl px-3 py-2.5 text-white text-sm font-bold outline-none focus:border-[#F5C842] placeholder:text-gray-600"
                                                     />
                                                 )}
                                                 <input
@@ -783,19 +796,19 @@ export function WeeklyTopicTab({
                                                     type="date"
                                                     value={bonusDate}
                                                     onChange={e => setBonusDate(e.target.value)}
-                                                    className="w-full bg-[#222] border border-[#333] rounded-xl px-3 py-2.5 text-white text-sm font-bold outline-none focus:border-[#D4AF37]"
+                                                    className="w-full bg-[#16213E] border border-[#253A5C] rounded-xl px-3 py-2.5 text-white text-sm font-bold outline-none focus:border-[#F5C842]"
                                                 />
                                                 <textarea
                                                     value={bonusDesc}
                                                     onChange={e => setBonusDesc(e.target.value)}
                                                     rows={2}
                                                     placeholder="備註（選填）"
-                                                    className="w-full bg-[#222] border border-[#333] rounded-xl px-3 py-2.5 text-white text-sm font-bold outline-none focus:border-[#D4AF37] resize-none placeholder:text-gray-600"
+                                                    className="w-full bg-[#16213E] border border-[#253A5C] rounded-xl px-3 py-2.5 text-white text-sm font-bold outline-none focus:border-[#F5C842] resize-none placeholder:text-gray-600"
                                                 />
                                                 {(cfg.id === 'b5' || cfg.id === 'b6') && (
                                                     <div className="space-y-2">
                                                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">上傳截圖 (必填)</label>
-                                                        <div className="flex items-center justify-center gap-2 w-full px-4 py-3 border-2 border-dashed border-[#333] rounded-xl bg-[#222] hover:border-[#D4AF37]/50 hover:bg-[#222]/80 transition-colors cursor-pointer relative">
+                                                        <div className="flex items-center justify-center gap-2 w-full px-4 py-3 border-2 border-dashed border-[#253A5C] rounded-xl bg-[#16213E] hover:border-[#F5C842]/50 hover:bg-[#16213E]/80 transition-colors cursor-pointer relative">
                                                             <input
                                                                 type="file"
                                                                 accept="image/*"
@@ -810,11 +823,11 @@ export function WeeklyTopicTab({
                                                     </div>
                                                 )}
                                                 <div className="flex gap-2">
-                                                    <button type="button" onClick={() => { setActiveBonusForm(null); setBonusScreenshot(null); }} className="flex-1 py-2.5 bg-[#222] text-gray-400 font-bold rounded-xl text-sm">取消</button>
+                                                    <button type="button" onClick={() => { setActiveBonusForm(null); setBonusScreenshot(null); }} className="flex-1 py-2.5 bg-[#16213E] text-gray-400 font-bold rounded-xl text-sm">取消</button>
                                                     <button
                                                         type="submit"
                                                         disabled={isSubmittingBonus || isUploadingScreenshot || !bonusTarget.trim() || ((cfg.id === 'b5' || cfg.id === 'b6') && !bonusScreenshot)}
-                                                        className="flex-2 py-2.5 bg-[#D4AF37] text-black font-black rounded-xl text-sm active:scale-95 transition-all disabled:opacity-50">
+                                                        className="flex-2 py-2.5 bg-[#F5C842] text-black font-black rounded-xl text-sm active:scale-95 transition-all disabled:opacity-50">
                                                         {isUploadingScreenshot ? '上傳中…' : isSubmittingBonus ? '提交中…' : '確認送出'}
                                                     </button>
                                                 </div>
@@ -825,7 +838,7 @@ export function WeeklyTopicTab({
 
                                 {/* 既有申請的狀態 */}
                                 {existingApp && existingApp.status === 'rejected' && (
-                                    <p className="text-[10px] text-[#E50914] font-bold">⚠️ 上次申請已退回：{existingApp.final_review_notes || existingApp.squad_review_notes || '無備註'}</p>
+                                    <p className="text-[10px] text-[#C0392B] font-bold">⚠️ 上次申請已退回：{existingApp.final_review_notes || existingApp.squad_review_notes || '無備註'}</p>
                                 )}
                             </div>
                         );
@@ -840,7 +853,7 @@ export function WeeklyTopicTab({
                     {temporaryQuests.map(tq => {
                         const isMax = logs.filter(l => l.QuestID.startsWith(tq.id)).length >= 1;
                         return (
-                            <div key={tq.id} className={`p-5 rounded-3xl bg-[#111] border border-blue-500/20 relative overflow-hidden ${isMax ? 'opacity-50' : ''}`}>
+                            <div key={tq.id} className={`p-5 rounded-3xl bg-[#1B2A4A] border border-blue-500/20 relative overflow-hidden ${isMax ? 'opacity-50' : ''}`}>
                                 <div className="absolute top-0 right-0 bg-blue-600/20 text-blue-400 px-3 py-1 rounded-bl-xl text-[9px] font-black uppercase tracking-widest">官方加碼</div>
                                 <div className="flex items-center gap-3 mb-4 mt-2">
                                     <span className="text-3xl">🎬</span>
@@ -862,7 +875,7 @@ export function WeeklyTopicTab({
                                             <div key={idx} className="flex flex-col items-center gap-1.5">
                                                 <span className="text-[10px] text-gray-500 font-mono">{d.getMonth() + 1}/{d.getDate()}</span>
                                                 <button onClick={() => isDone ? onUndo({ ...tq, id: qId }) : (!isMax && onCheckIn({ ...tq, id: qId }))}
-                                                    className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all ${isDone ? 'bg-[#E50914] text-white' : 'bg-[#222] text-gray-500 hover:bg-[#333]'}`}
+                                                    className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all ${isDone ? 'bg-[#C0392B] text-white' : 'bg-[#16213E] text-gray-500 hover:bg-[#253A5C]'}`}
                                                 >{day}</button>
                                             </div>
                                         );

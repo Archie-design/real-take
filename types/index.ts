@@ -81,6 +81,8 @@ export interface SystemSettings {
   RegistrationMode?: 'open' | 'roster'; // 'open' = 自由註冊；'roster' = 名單驗證
   VolunteerPassword?: string;
   FineSettings?: FineSettings;
+  QuestRewardOverrides?: Record<string, number>;  // 定課分值動態調整：questId → reward
+  DisabledQuests?: string[];                       // 停用的定課 ID 列表
 }
 
 export interface BonusApplication {

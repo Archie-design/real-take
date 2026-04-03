@@ -427,12 +427,13 @@ export default function App() {
     }
   };
 
-  const handleSubmitInterview = async (data: { interviewTarget: string; interviewDate: string; description: string }) => {
+  const handleSubmitInterview = async (data: { interviewTarget: string; interviewDate: string; description: string; bonusType?: 'b1' | 'b2' }) => {
     if (!userData) return;
     const res = await submitInterviewApplication(
       userData.UserID, userData.Name,
       userData.TeamName || null, userData.SquadName || null,
-      data.interviewTarget, data.interviewDate, data.description
+      data.interviewTarget, data.interviewDate, data.description,
+      data.bonusType || 'b1'
     );
     if (res.success && res.application) {
       setMyBonusApps(prev => [res.application as BonusApplication, ...prev]);
@@ -651,11 +652,23 @@ export default function App() {
           if (sObj.FineSettings) parsedFineSettings = JSON.parse(sObj.FineSettings);
         } catch (_) {}
 
+        let parsedQuestRewardOverrides;
+        try {
+          if (sObj.QuestRewardOverrides) parsedQuestRewardOverrides = JSON.parse(sObj.QuestRewardOverrides);
+        } catch (_) {}
+
+        let parsedDisabledQuests;
+        try {
+          if (sObj.DisabledQuests) parsedDisabledQuests = JSON.parse(sObj.DisabledQuests);
+        } catch (_) {}
+
         setSystemSettings({
           TopicQuestTitle: sObj.TopicQuestTitle || '主題載入中',
           RegistrationMode: (sObj.RegistrationMode as 'open' | 'roster') || 'open',
           VolunteerPassword: sObj.VolunteerPassword,
           FineSettings: parsedFineSettings,
+          QuestRewardOverrides: parsedQuestRewardOverrides,
+          DisabledQuests: parsedDisabledQuests,
         });
       }
 
@@ -791,7 +804,7 @@ export default function App() {
   };
 
   const HomeView = () => (
-    <div className="min-h-screen bg-black text-white pb-40 text-center animate-in fade-in">
+    <div className="min-h-screen bg-[#16213E] text-white pb-40 text-center animate-in fade-in">
       <Header userData={userData} onLogout={handleLogout} />
       <GmToolbar />
 
@@ -815,7 +828,7 @@ export default function App() {
         </div>
       )}
 
-      <nav className="sticky top-0 z-20 bg-black/80 backdrop-blur-xl flex p-3 gap-2 border-b border-[#1a1a1a] shadow-xl overflow-x-auto no-scrollbar">
+      <nav className="sticky top-0 z-20 bg-[#16213E]/80 backdrop-blur-xl flex p-3 gap-2 border-b border-[#253A5C] shadow-xl overflow-x-auto no-scrollbar">
         {([
           { id: 'daily',   label: '每日觀影' },
           { id: 'weekly',  label: '導演報表' },
@@ -827,8 +840,8 @@ export default function App() {
             onClick={() => setActiveTab(id)}
             className={`shrink-0 px-5 py-3 rounded-full text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer
               ${activeTab === id
-                ? 'bg-[#E50914] text-white shadow-[0_0_15px_rgba(229,9,20,0.4)]'
-                : 'bg-[#111] text-[rgba(255,255,255,0.45)] hover:text-white hover:bg-[#1a1a1a]'}`}
+                ? 'bg-[#C0392B] text-white shadow-[0_0_15px_rgba(229,9,20,0.4)]'
+                : 'bg-[#1B2A4A] text-[rgba(255,255,255,0.45)] hover:text-white hover:bg-[#253A5C]'}`}
           >
             {label}
           </button>
@@ -837,8 +850,8 @@ export default function App() {
           onClick={() => setActiveTab('course')}
           className={`shrink-0 flex items-center gap-1.5 px-5 py-3 rounded-full text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer
             ${activeTab === 'course'
-              ? 'bg-[#E50914] text-white shadow-[0_0_15px_rgba(229,9,20,0.4)]'
-              : 'bg-[#111] text-[rgba(255,255,255,0.45)] hover:text-white hover:bg-[#1a1a1a]'}`}
+              ? 'bg-[#C0392B] text-white shadow-[0_0_15px_rgba(229,9,20,0.4)]'
+              : 'bg-[#1B2A4A] text-[rgba(255,255,255,0.45)] hover:text-white hover:bg-[#253A5C]'}`}
         >
           <CalendarDays size={13} />
           首映曆
@@ -848,8 +861,8 @@ export default function App() {
             onClick={handleOpenCaptainTab}
             className={`shrink-0 flex items-center gap-1.5 px-5 py-3 rounded-full text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer
               ${activeTab === 'captain'
-                ? 'bg-[#D4AF37] text-black shadow-[0_0_15px_rgba(212,175,55,0.4)]'
-                : 'bg-[#111] text-[rgba(255,255,255,0.45)] hover:text-white hover:bg-[#1a1a1a]'}`}
+                ? 'bg-[#F5C842] text-black shadow-[0_0_15px_rgba(212,175,55,0.4)]'
+                : 'bg-[#1B2A4A] text-[rgba(255,255,255,0.45)] hover:text-white hover:bg-[#253A5C]'}`}
           >
             <Clapperboard size={13} />
             製片總部
@@ -860,8 +873,8 @@ export default function App() {
             onClick={handleOpenCommandantTab}
             className={`shrink-0 flex items-center gap-1.5 px-5 py-3 rounded-full text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer
               ${activeTab === 'commandant'
-                ? 'bg-[#D4AF37] text-black shadow-[0_0_15px_rgba(212,175,55,0.4)]'
-                : 'bg-[#111] text-[rgba(255,255,255,0.45)] hover:text-white hover:bg-[#1a1a1a]'}`}
+                ? 'bg-[#F5C842] text-black shadow-[0_0_15px_rgba(212,175,55,0.4)]'
+                : 'bg-[#1B2A4A] text-[rgba(255,255,255,0.45)] hover:text-white hover:bg-[#253A5C]'}`}
           >
             <Video size={13} />
             片商總部
@@ -881,6 +894,8 @@ export default function App() {
             onUndo={setUndoTarget}
             onClearTodayLogs={handleClearTodayLogs}
             formatCheckInTime={formatCheckInTime}
+            questRewardOverrides={systemSettings?.QuestRewardOverrides}
+            disabledQuests={systemSettings?.DisabledQuests}
           />
         )}
         {activeTab === 'weekly' && userData && (
@@ -898,6 +913,8 @@ export default function App() {
             onUndo={setUndoTarget}
             onSubmitInterview={handleSubmitInterview}
             onSubmitBonusApp={handleSubmitBonusApp}
+            questRewardOverrides={systemSettings?.QuestRewardOverrides}
+            disabledQuests={systemSettings?.DisabledQuests}
           />
         )}
         {activeTab === 'rank' && <RankTab leaderboard={leaderboard} currentUserId={userData?.UserID} />}
@@ -947,9 +964,9 @@ export default function App() {
   return (
     <div className="text-center justify-center mx-auto w-full font-sans">
       {view === 'loading' && (
-        <div className="min-h-screen bg-black flex flex-col items-center justify-center p-10 text-center mx-auto">
-          <Loader2 className="w-16 h-16 text-[#E50914] animate-spin mb-6 mx-auto" />
-          <p className="text-[#E50914] text-xl font-bold animate-pulse text-center mx-auto">載入片庫中...</p>
+        <div className="min-h-screen bg-[#16213E] flex flex-col items-center justify-center p-10 text-center mx-auto">
+          <Loader2 className="w-16 h-16 text-[#C0392B] animate-spin mb-6 mx-auto" />
+          <p className="text-[#C0392B] text-xl font-bold animate-pulse text-center mx-auto">載入片庫中...</p>
         </div>
       )}
 
@@ -1008,9 +1025,9 @@ export default function App() {
       )}
 
       {isSyncing && (
-        <div className="fixed inset-0 bg-black/80 z-[1100] flex flex-col items-center justify-center text-center mx-auto backdrop-blur-sm">
-          <Loader2 className="w-12 h-12 text-[#E50914] animate-spin mb-4 mx-auto" />
-          <p className="text-[#E50914] font-bold animate-pulse tracking-widest uppercase text-center mx-auto">與片庫同步中...</p>
+        <div className="fixed inset-0 bg-[#16213E]/80 z-[1100] flex flex-col items-center justify-center text-center mx-auto backdrop-blur-sm">
+          <Loader2 className="w-12 h-12 text-[#C0392B] animate-spin mb-4 mx-auto" />
+          <p className="text-[#C0392B] font-bold animate-pulse tracking-widest uppercase text-center mx-auto">與片庫同步中...</p>
         </div>
       )}
 
