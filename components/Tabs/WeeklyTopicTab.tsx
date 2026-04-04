@@ -405,7 +405,7 @@ export function WeeklyTopicTab({
                         <div className="w-12 h-12 rounded-2xl bg-black/50 flex items-center justify-center text-white/60 shrink-0"><Clapperboard size={28} /></div>
                         <div className="flex-1">
                             <span className="text-[9px] font-black bg-[#F5C842] text-black px-2 py-0.5 rounded-full uppercase">主題影展</span>
-                            <h3 className="text-lg font-black text-white mt-1 italic">「{systemSettings.TopicQuestTitle}」</h3>
+                            <h3 className="text-lg font-black text-white mt-1 italic">「{themePeriod.movie}」</h3>
                         </div>
                         <div className="text-right">
                             <p className="font-black text-[#F5C842]">+1,000</p>

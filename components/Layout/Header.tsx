@@ -2,6 +2,7 @@ import React from 'react';
 import { LogOut } from 'lucide-react';
 import { CharacterStats } from '@/types';
 import { getExpForNextLevel, getAccumulatedExpForLevel } from '@/lib/constants';
+import { FilmStripDivider } from '@/components/ui/FilmIcons';
 
 interface HeaderProps {
     userData: CharacterStats | null;
@@ -21,7 +22,9 @@ export function Header({ userData, onLogout }: HeaderProps) {
     }
 
     return (
-        <header className="px-6 py-6 bg-[#16213E] border-b border-[#253A5C] flex items-center gap-4 relative">
+        <header className="bg-[#16213E] border-b border-[#253A5C]">
+        <FilmStripDivider className="text-[#F5C842]" />
+        <div className="px-6 py-5 flex items-center gap-4 relative">
             <div className="relative shrink-0">
                 <div className="w-16 h-16 bg-[#C0392B] rounded-3xl flex items-center justify-center text-white text-3xl font-black shadow-lg">
                     {userData?.Name?.[0]}
@@ -57,6 +60,8 @@ export function Header({ userData, onLogout }: HeaderProps) {
                 className="absolute top-1/2 -translate-y-1/2 right-6 bg-[#1B2A4A] border border-[#253A5C] p-2.5 rounded-xl text-[rgba(255,255,255,0.35)] hover:text-red-400 hover:border-red-900/40 transition-all duration-150 cursor-pointer active:scale-95 shadow-md">
                 <LogOut size={18} />
             </button>
+        </div>
+        <FilmStripDivider className="text-[#F5C842]" />
         </header>
     );
 }

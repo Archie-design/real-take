@@ -8,8 +8,9 @@ import {
   Dice5, Loader2, RotateCcw,
   CalendarDays, Clapperboard, Video
 } from 'lucide-react';
+import { FilmStripIcon, FilmReelIcon, Glasses3DIcon, MegaphoneIcon } from '@/components/ui/FilmIcons';
 
-import { CharacterStats, DailyLog, Quest, SystemSettings, TopicHistory, TemporaryQuest, BonusApplication, AdminLog, Testimony, FinePaymentRecord, AngelCallPairingsData } from '@/types';
+import { CharacterStats, DailyLog, Quest, SystemSettings, TemporaryQuest, BonusApplication, AdminLog, FinePaymentRecord } from '@/types';
 import { getLogicalDateStr, getWeeklyMonday } from '@/lib/utils/time';
 import { standardizePhone } from '@/lib/utils/phone';
 import { ADMIN_PASSWORD, calculateLevelFromExp } from '@/lib/constants';
@@ -26,8 +27,7 @@ import { CommandantTab } from '@/components/Tabs/CommandantTab';
 import CourseTab from '@/components/Tabs/CourseTab';
 import { AdminDashboard } from '@/components/Admin/AdminDashboard';
 import { processCheckInTransaction, clearTodayLogs } from '@/app/actions/quest';
-import { importRostersData, autoAssignSquadsForTesting, logAdminAction, runAngelCallPairing } from '@/app/actions/admin';
-import { getTestimonies } from '@/app/actions/testimonies_admin';
+import { importRostersData, autoAssignSquadsForTesting, logAdminAction } from '@/app/actions/admin';
 import { drawWeeklyQuestForSquad, autoDrawAllSquads, getSquadMembersStats, getBattalionMembersStats } from '@/app/actions/team';
 import { SquadMemberStats } from '@/types';
 import { submitInterviewApplication, reviewBonusBySquadLeader, reviewBonusByAdmin, getBonusApplications, getAdminActivityLog, submitBonusApplication } from '@/app/actions/bonus';
@@ -59,13 +59,11 @@ export default function App() {
   const [userData, setUserData] = useState<CharacterStats | null>(null);
   const [logs, setLogs] = useState<DailyLog[]>([]);
   const [leaderboard, setLeaderboard] = useState<CharacterStats[]>([]);
-  const [topicHistory, setTopicHistory] = useState<TopicHistory[]>([]);
   const [temporaryQuests, setTemporaryQuests] = useState<TemporaryQuest[]>([]);
-  const [systemSettings, setSystemSettings] = useState<SystemSettings>({ TopicQuestTitle: '載入中...' });
+  const [systemSettings, setSystemSettings] = useState<SystemSettings>({});
   const [modalMessage, setModalMessage] = useState<{ text: string, type: 'info' | 'error' | 'success' } | null>(null);
   const [undoTarget, setUndoTarget] = useState<Quest | null>(null);
   const [adminAuth, setAdminAuth] = useState(false);
-  const [angelCallPairings, setAngelCallPairings] = useState<AngelCallPairingsData | null>(null);
   const [teamSettings, setTeamSettings] = useState<any>(null);
   const [teamMemberCount, setTeamMemberCount] = useState<number>(1);
 
@@ -74,8 +72,6 @@ export default function App() {
 
   const [pendingFinalReviewApps, setPendingFinalReviewApps] = useState<BonusApplication[]>([]);
   const [adminLogs, setAdminLogs] = useState<AdminLog[]>([]);
-  const [testimonies, setTestimonies] = useState<Testimony[]>([]);
-
   // 罰款管理 state
   interface SquadMemberFine { userId: string; name: string; totalFines: number; finePaid: number; balance: number; }
   const [squadFineMembers, setSquadFineMembers] = useState<SquadMemberFine[]>([]);
@@ -129,34 +125,8 @@ export default function App() {
       ]);
       if (w4Res.success) setPendingFinalReviewApps(w4Res.applications);
       if (logsRes.success) setAdminLogs(logsRes.logs as AdminLog[]);
-      // Load angel call pairings from SystemSettings
-      const { data: pairingsSetting } = await supabase
-        .from('SystemSettings')
-        .select('Value')
-        .eq('SettingName', 'AngelCallPairings')
-        .maybeSingle();
-      if (pairingsSetting?.Value) {
-        try { setAngelCallPairings(JSON.parse(pairingsSetting.Value)); } catch (_) { /* ignore parse errors */ }
-      }
     } else {
       setModalMessage({ text: "密令錯誤，大會禁地不可擅闖。", type: 'error' });
-    }
-  };
-
-  const handleRunAngelCallPairing = async () => {
-    setIsSyncing(true);
-    try {
-      const res = await runAngelCallPairing();
-      if (res.success && res.pairings) {
-        setAngelCallPairings({ weekOf: res.weekOf!, pairings: res.pairings });
-        setModalMessage({ text: `配對完成！共 ${res.pairings.length} 組配對。`, type: 'success' });
-      } else {
-        setModalMessage({ text: '配對失敗：' + (res.error || '未知錯誤'), type: 'error' });
-      }
-    } catch (e: any) {
-      setModalMessage({ text: '系統異常：' + e.message, type: 'error' });
-    } finally {
-      setIsSyncing(false);
     }
   };
 
@@ -365,12 +335,7 @@ export default function App() {
       if (error) throw error;
       setSystemSettings(prev => ({ ...prev, [key]: value }));
 
-      if (key === 'TopicQuestTitle') {
-        const { data: newHistory, error: historyErr } = await supabase.from('TopicHistory').insert([{ TopicTitle: value }]).select();
-        if (!historyErr && newHistory) {
-          setTopicHistory(prev => [newHistory[0] as TopicHistory, ...prev]);
-        }
-      }
+
 
       setModalMessage({ text: "設定已同步，所有成員將即時看到更新。", type: 'success' });
     } catch (err) {
@@ -663,7 +628,6 @@ export default function App() {
         } catch (_) {}
 
         setSystemSettings({
-          TopicQuestTitle: sObj.TopicQuestTitle || '主題載入中',
           RegistrationMode: (sObj.RegistrationMode as 'open' | 'roster') || 'open',
           VolunteerPassword: sObj.VolunteerPassword,
           FineSettings: parsedFineSettings,
@@ -671,9 +635,6 @@ export default function App() {
           DisabledQuests: parsedDisabledQuests,
         });
       }
-
-      const { data: historyData } = await supabase.from('TopicHistory').select('*').order('created_at', { ascending: false });
-      if (historyData) setTopicHistory(historyData as TopicHistory[]);
 
       const { data: tempQuestsData } = await supabase.from('temporaryquests').select('*').order('created_at', { ascending: false });
       if (tempQuestsData) {
@@ -756,7 +717,6 @@ export default function App() {
       if (rankData) setLeaderboard(rankData as CharacterStats[]);
     };
     if (activeTab === 'rank' || view === 'admin') fetchRank();
-    if (view === 'admin') getTestimonies().then(setTestimonies).catch(console.error);
   }, [activeTab, view]);
 
   // Refresh w4 applications whenever the weekly tab becomes active
@@ -830,19 +790,20 @@ export default function App() {
 
       <nav className="sticky top-0 z-20 bg-[#16213E]/80 backdrop-blur-xl flex p-3 gap-2 border-b border-[#253A5C] shadow-xl overflow-x-auto no-scrollbar">
         {([
-          { id: 'daily',   label: '每日觀影' },
-          { id: 'weekly',  label: '導演報表' },
-          { id: 'rank',    label: '票房榜' },
-          { id: 'stats',   label: '觀影分析' },
-        ] as const).map(({ id, label }) => (
+          { id: 'daily',   label: '每日觀影', icon: <FilmStripIcon size={13} /> },
+          { id: 'weekly',  label: '導演報表', icon: <MegaphoneIcon size={13} /> },
+          { id: 'rank',    label: '票房榜',   icon: <FilmReelIcon size={13} /> },
+          { id: 'stats',   label: '觀影分析', icon: <Glasses3DIcon size={13} /> },
+        ] as const).map(({ id, label, icon }) => (
           <button
             key={id}
             onClick={() => setActiveTab(id)}
-            className={`shrink-0 px-5 py-3 rounded-full text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer
+            className={`shrink-0 flex items-center gap-1.5 px-5 py-3 rounded-full text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer
               ${activeTab === id
                 ? 'bg-[#C0392B] text-white shadow-[0_0_15px_rgba(229,9,20,0.4)]'
                 : 'bg-[#1B2A4A] text-[rgba(255,255,255,0.45)] hover:text-white hover:bg-[#253A5C]'}`}
           >
+            {icon}
             {label}
           </button>
         ))}
@@ -998,17 +959,13 @@ export default function App() {
           systemSettings={systemSettings}
           updateGlobalSetting={updateGlobalSetting}
           leaderboard={leaderboard}
-          topicHistory={topicHistory}
           temporaryQuests={temporaryQuests}
           pendingFinalReviewApps={pendingFinalReviewApps}
           adminLogs={adminLogs}
-          testimonies={testimonies}
-          angelCallPairings={angelCallPairings}
           onAddTempQuest={handleAddTempQuest}
           onToggleTempQuest={handleToggleTempQuest}
           onDeleteTempQuest={handleDeleteTempQuest}
           onAutoDrawAllSquads={handleAutoDrawAllSquads}
-          onRunAngelCallPairing={handleRunAngelCallPairing}
           onImportRoster={handleImportRoster}
           onFinalReviewBonus={handleFinalReviewBonus}
           onClose={() => setView('login')}

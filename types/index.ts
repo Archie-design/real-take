@@ -77,7 +77,6 @@ export interface FineSettings {
 }
 
 export interface SystemSettings {
-  TopicQuestTitle: string;
   RegistrationMode?: 'open' | 'roster'; // 'open' = 自由註冊；'roster' = 名單驗證
   VolunteerPassword?: string;
   FineSettings?: FineSettings;

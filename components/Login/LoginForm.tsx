@@ -1,5 +1,6 @@
 import React from 'react';
 import { UserPlus } from 'lucide-react';
+import { FilmBackgroundDecorations } from '@/components/ui/FilmIcons';
 
 function LineIcon() {
     return (
@@ -18,13 +19,14 @@ interface LoginFormProps {
 
 export function LoginForm({ onLogin, onGoToRegister, onGoToAdmin, isSyncing }: LoginFormProps) {
     return (
-        <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center px-6 py-10 space-y-8">
-            <div className="animate-in zoom-in duration-700 text-center mx-auto">
+        <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center px-6 py-10 space-y-8 relative">
+            <FilmBackgroundDecorations />
+            <div className="animate-in zoom-in duration-700 text-center mx-auto relative z-10">
                 <img src="/images/logo.png" alt="大方圓開運親證班" className="w-[min(18rem,60vw)] h-[min(18rem,60vw)] mx-auto mb-4 drop-shadow-2xl object-contain" onError={e => { e.currentTarget.style.display = 'none'; }} />
                 <h1 className="text-2xl md:text-4xl font-black text-white mb-2 tracking-wide text-center mx-auto">大方圓開運親證班</h1>
 
             </div>
-            <form onSubmit={onLogin} className="w-full max-w-sm space-y-6 mx-auto text-center">
+            <form onSubmit={onLogin} className="w-full max-w-sm space-y-6 mx-auto text-center relative z-10">
                 <input name="name" required className="w-full bg-slate-900 border-2 border-white/5 rounded-2xl p-6 text-white text-center text-xl outline-none focus:border-orange-500 font-bold" placeholder="演員姓名" />
                 <input name="phone" required type="password" maxLength={3} inputMode="numeric" className="w-full bg-slate-900 border-2 border-white/5 rounded-2xl p-6 text-white text-center text-xl focus:border-orange-500 font-bold" placeholder="手機末三碼" />
                 <button disabled={isSyncing} className="w-full py-7 rounded-4xl bg-orange-600 text-white font-black text-2xl shadow-xl active:scale-95 transition-all text-center mx-auto">進入影城</button>
