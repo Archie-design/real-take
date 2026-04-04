@@ -283,8 +283,25 @@ export async function submitBonusApplication(
         }
     }
 
-    // b7 每次課程日期不同，quest_id 帶日期以允許多次申請
-    const questId = bonusType === 'b7' ? `b7|${date}` : bonusType;
+    // b7：同一課程/活動名稱只算1次（連續幾天的活動不重複計分）
+    // quest_id 使用標準化課程名稱作為唯一鍵，日期僅留在 interview_date 供審核參考
+    if (bonusType === 'b7') {
+        const normalizedName = target.trim().toLowerCase().replace(/\s+/g, '_').slice(0, 60);
+        const b7QuestId = `b7|${normalizedName}`;
+        const { data: existing } = await supabase
+            .from('BonusApplications')
+            .select('id, status')
+            .eq('user_id', userId)
+            .eq('quest_id', b7QuestId)
+            .neq('status', 'rejected')
+            .maybeSingle();
+        if (existing) {
+            return { success: false, error: `「${target}」已有申請記錄，同一課程/活動只計算一次` };
+        }
+    }
+    const questId = bonusType === 'b7'
+        ? `b7|${target.trim().toLowerCase().replace(/\s+/g, '_').slice(0, 60)}`
+        : bonusType;
 
     // b5、b6 需要截圖，送小隊長初審；doc1 直接送 GM 終審；其他送大隊長終審
     const status = (bonusType === 'b5' || bonusType === 'b6') ? 'pending' : 'squad_approved';

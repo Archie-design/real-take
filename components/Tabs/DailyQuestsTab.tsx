@@ -347,6 +347,9 @@ export function DailyQuestsTab({
         .filter(q => FLEX_QUEST_IDS.has(q.id) && !disabledSet.has(q.id))
         .map(applyOverride);
     const flexDoneCount = todayLogs.filter(l => FLEX_QUEST_IDS.has(l.QuestID)).length;
+    // q1/q1_dawn 佔每日3種名額中的一個；totalDailyCount 用於停用判斷
+    const totalDailyCount = flexDoneCount + (bodyDone ? 1 : 0);
+    const flexSlotsLeft = Math.max(0, 3 - totalDailyCount);
     const todayR1Count = todayLogs.filter(l => l.QuestID === 'r1').length;
     const isBodyDisabled = disabledSet.has('q1');
     const isR1Disabled = disabledSet.has('r1');
@@ -396,7 +399,7 @@ export function DailyQuestsTab({
                 quest={q}
                 isDone={done}
                 doneTime={log ? formatCheckInTime(log.Timestamp) : undefined}
-                isDisabled={flexDoneCount >= 3}
+                isDisabled={flexSlotsLeft <= 0}
                 onCheckIn={() => done ? onUndo(q) : onCheckIn(q)}
                 editMode={isEditMode}
                 isFav={favIds.includes(q.id)}
@@ -456,8 +459,8 @@ export function DailyQuestsTab({
                         <>
                             <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">任意定課（每日最多 3 種）</h2>
                             <div className="flex items-center gap-2">
-                                <span className={`text-[10px] font-bold ${flexDoneCount >= 3 ? 'text-[#C0392B]' : 'text-gray-600'}`}>
-                                    已完成 {flexDoneCount} / 3
+                                <span className={`text-[10px] font-bold ${flexSlotsLeft <= 0 ? 'text-[#C0392B]' : 'text-gray-600'}`}>
+                                    {flexSlotsLeft <= 0 ? `已達上限` : `剩餘 ${flexSlotsLeft} 種`}
                                 </span>
                                 <button
                                     onClick={() => setIsEditMode(true)}

@@ -1,15 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import {
     Phone, Mic, Award, Users, PhoneCall,
     GraduationCap, Sparkles, Handshake, BookOpen, Megaphone, Ticket, Upload,
-    Film, Clapperboard, AlertTriangle,
+    Film, Clapperboard, AlertTriangle, QrCode, RefreshCw, CheckCircle2, Loader2,
     type LucideIcon,
 } from 'lucide-react';
+import QRCode from 'react-qr-code';
 import { Quest, DailyLog, SystemSettings, TemporaryQuest, BonusApplication, FineSettings } from '@/types';
 import { WEEKLY_QUEST_CONFIG, SQUAD_THEME_CONFIG, QUEST_ICON_MAP, SQUAD_THEME_ICON_MAP } from '@/lib/constants';
 import { getLogicalDateStr, getCurrentThemePeriod } from '@/lib/utils/time';
+import { getGatheringStatus, awardGatheringFullBonus, GatheringCheckin } from '@/app/actions/squad-gathering';
 
 interface WeeklyTopicTabProps {
     userId: string;
@@ -27,6 +29,10 @@ interface WeeklyTopicTabProps {
     onSubmitBonusApp: (type: 'b3' | 'b4' | 'b5' | 'b6' | 'b7', target: string, date: string, desc: string, screenshotUrl?: string) => Promise<void>;
     questRewardOverrides?: Record<string, number>;
     disabledQuests?: string[];
+    // 小隊定聚 QR 掃碼全員到齊
+    isCaptain?: boolean;
+    teamName?: string;
+    squadMemberCount?: number; // 用於判斷是否全員到齊
 }
 
 const BONUS_CONFIG: Array<{
@@ -131,6 +137,9 @@ export function WeeklyTopicTab({
     onSubmitBonusApp,
     questRewardOverrides,
     disabledQuests,
+    isCaptain = false,
+    teamName = '',
+    squadMemberCount = 0,
 }: WeeklyTopicTabProps) {
     // ── 當前電影主題週期 ──
     const themePeriod = getCurrentThemePeriod();
@@ -161,6 +170,41 @@ export function WeeklyTopicTab({
 
     // ── 小隊主題定聚選擇 state ──
     const [selectedTheme, setSelectedTheme] = useState<string | null>(null);
+
+    // ── 定聚 QR Code 掃碼全員到齊 state ──
+    const [gatheringQrTheme, setGatheringQrTheme] = useState<string | null>(null); // 目前開放掃碼的主題
+    const [gatheringCheckins, setGatheringCheckins] = useState<GatheringCheckin[]>([]);
+    const [isLoadingCheckins, setIsLoadingCheckins] = useState(false);
+    const [isAwardingBonus, setIsAwardingBonus] = useState(false);
+    const [awardResult, setAwardResult] = useState<{ awarded: number; errors: string[] } | null>(null);
+
+    const buildGatheringId = useCallback((themeId: string) => {
+        return `${themeId}|${teamName}|${logicalTodayStr}`;
+    }, [teamName, logicalTodayStr]);
+
+    const refreshCheckins = useCallback(async (themeId: string) => {
+        setIsLoadingCheckins(true);
+        const gid = buildGatheringId(themeId);
+        const res = await getGatheringStatus(gid, squadMemberCount);
+        if (res.success && res.status) {
+            setGatheringCheckins(res.status.checkins);
+        }
+        setIsLoadingCheckins(false);
+    }, [buildGatheringId, squadMemberCount]);
+
+    const handleStartGathering = (themeId: string) => {
+        setGatheringQrTheme(themeId);
+        setAwardResult(null);
+        refreshCheckins(themeId);
+    };
+
+    const handleAwardFullBonus = async (themeId: string) => {
+        setIsAwardingBonus(true);
+        const gid = buildGatheringId(themeId);
+        const res = await awardGatheringFullBonus(gid, themeId as 'sq1' | 'sq2' | 'sq3' | 'sq4');
+        setAwardResult({ awarded: res.awarded, errors: res.errors });
+        setIsAwardingBonus(false);
+    };
 
     const handleW4Submit = async (e: { preventDefault: () => void }) => {
         e.preventDefault();
@@ -586,13 +630,93 @@ export function WeeklyTopicTab({
                                         >
                                             +{theme.reward.toLocaleString()} 主題積分
                                         </button>
-                                        <button
-                                            onClick={() => onCheckIn({ id: `${theme.id}_full`, title: `${theme.title} 全員到齊`, reward: theme.bonusFull })}
-                                            className="flex-1 py-2 bg-[#253A5C] text-white font-bold rounded-xl text-xs active:scale-95 transition-all hover:bg-[#444]"
-                                        >
-                                            +{theme.bonusFull.toLocaleString()} 全員加成
-                                        </button>
+                                        {isCaptain ? (
+                                            <button
+                                                onClick={() => handleStartGathering(theme.id)}
+                                                className="flex-1 py-2 bg-emerald-700/80 text-white font-bold rounded-xl text-xs active:scale-95 transition-all hover:bg-emerald-600 flex items-center justify-center gap-1"
+                                            >
+                                                <QrCode size={12} />
+                                                掃碼全員到齊
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => onCheckIn({ id: `${theme.id}_full`, title: `${theme.title} 全員到齊`, reward: theme.bonusFull })}
+                                                className="flex-1 py-2 bg-[#253A5C] text-white font-bold rounded-xl text-xs active:scale-95 transition-all hover:bg-[#444]"
+                                            >
+                                                +{theme.bonusFull.toLocaleString()} 全員加成
+                                            </button>
+                                        )}
                                     </div>
+                                    {/* QR Code 掃碼面板（小隊長限定） */}
+                                    {isCaptain && gatheringQrTheme === theme.id && (() => {
+                                        const gid = buildGatheringId(theme.id);
+                                        const qrUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/squad-checkin?g=${encodeURIComponent(gid)}`;
+                                        const isComplete = gatheringCheckins.length >= squadMemberCount && squadMemberCount > 0;
+                                        return (
+                                            <div className="mt-2 p-4 rounded-2xl bg-black/40 border border-emerald-600/30 space-y-4">
+                                                {/* QR Code */}
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">請隊員掃碼報到</p>
+                                                    <div className="bg-white p-3 rounded-xl">
+                                                        <QRCode value={qrUrl} size={160} />
+                                                    </div>
+                                                    <p className="text-[9px] text-gray-500 text-center break-all">{qrUrl}</p>
+                                                </div>
+                                                {/* 到場名單 */}
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <p className="text-[10px] font-black text-gray-400 uppercase">
+                                                            已到場 {gatheringCheckins.length} {squadMemberCount > 0 ? `/ ${squadMemberCount}` : ''} 人
+                                                        </p>
+                                                        <button
+                                                            onClick={() => refreshCheckins(theme.id)}
+                                                            disabled={isLoadingCheckins}
+                                                            className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-300 transition-colors"
+                                                        >
+                                                            <RefreshCw size={10} className={isLoadingCheckins ? 'animate-spin' : ''} />
+                                                            重新整理
+                                                        </button>
+                                                    </div>
+                                                    {gatheringCheckins.length > 0 ? (
+                                                        <div className="space-y-1">
+                                                            {gatheringCheckins.map(c => (
+                                                                <div key={c.userId} className="flex items-center gap-2 text-xs text-emerald-400">
+                                                                    <CheckCircle2 size={12} />
+                                                                    <span className="font-bold">{c.userName ?? c.userId}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-[10px] text-gray-600">尚無人報到…</p>
+                                                    )}
+                                                </div>
+                                                {/* 確認全員加成按鈕 */}
+                                                {awardResult ? (
+                                                    <div className="text-center text-xs text-emerald-400 font-bold">
+                                                        已發放 +{theme.bonusFull.toLocaleString()} × {awardResult.awarded} 人
+                                                        {awardResult.errors.length > 0 && (
+                                                            <p className="text-red-400 mt-1">{awardResult.errors.join('、')}</p>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <button
+                                                        disabled={isAwardingBonus || gatheringCheckins.length === 0}
+                                                        onClick={() => handleAwardFullBonus(theme.id)}
+                                                        className={`w-full py-2.5 rounded-xl font-black text-xs transition-all active:scale-95 flex items-center justify-center gap-1.5
+                                                            ${isComplete
+                                                                ? 'bg-emerald-600 text-white hover:bg-emerald-500'
+                                                                : 'bg-[#253A5C] text-gray-400 hover:bg-[#333]'}`}
+                                                    >
+                                                        {isAwardingBonus
+                                                            ? <><Loader2 size={12} className="animate-spin" /> 發放中…</>
+                                                            : isComplete
+                                                                ? `全員到齊！發放 +${theme.bonusFull.toLocaleString()} 給所有人`
+                                                                : `確認發放 +${theme.bonusFull.toLocaleString()}（${gatheringCheckins.length} 人）`}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                             );
                         })()}

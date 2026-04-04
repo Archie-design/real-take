@@ -915,6 +915,9 @@ export default function App() {
             onSubmitBonusApp={handleSubmitBonusApp}
             questRewardOverrides={systemSettings?.QuestRewardOverrides}
             disabledQuests={systemSettings?.DisabledQuests}
+            isCaptain={!!(userData?.IsCaptain || userData?.IsGM)}
+            teamName={userData?.TeamName || ''}
+            squadMemberCount={squadMembers.length}
           />
         )}
         {activeTab === 'rank' && <RankTab leaderboard={leaderboard} currentUserId={userData?.UserID} />}
