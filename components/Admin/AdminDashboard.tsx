@@ -663,7 +663,7 @@ export function AdminDashboard({
                     </section>
 
                     <section className="space-y-6">
-                        <div className="flex items-center gap-2 text-orange-500 font-black text-sm uppercase tracking-widest"><Users size={16} /> 修行者票房榜預覽</div>
+                        <div className="flex items-center gap-2 text-orange-500 font-black text-sm uppercase tracking-widest"><Users size={16} /> 演員票房榜預覽</div>
                         <div className="bg-slate-900 border-2 border-slate-800 rounded-4xl overflow-hidden divide-y divide-slate-800 shadow-xl max-h-[400px] overflow-y-auto">
                             {leaderboard.map((p, i) => (
                                 <div key={p.UserID} className="flex items-center gap-4 p-4 hover:bg-white/5 transition-colors">

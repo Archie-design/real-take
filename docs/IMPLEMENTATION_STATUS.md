@@ -67,7 +67,7 @@
 | 罰款系統設定 | ✅ | `app/actions/fines.ts`（系統分頁） |
 | 定課分值編輯 & 啟停開關 | ✅ | AdminDashboard 任務分頁 |
 | 志工掃碼授權（密碼設定） | ✅ | `SystemSettings.VolunteerPassword`（審核分頁） |
-| 修行者票房榜預覽 | ✅ | 系統分頁，即時讀取 leaderboard |
+| 演員票房榜預覽 | ✅ | 系統分頁，即時讀取 leaderboard |
 
 ### 5. 活動時間軸 — 完成度：100%
 
