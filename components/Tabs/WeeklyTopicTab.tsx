@@ -33,6 +33,9 @@ interface WeeklyTopicTabProps {
     isCaptain?: boolean;
     teamName?: string;
     squadMemberCount?: number; // 用於判斷是否全員到齊
+    // 道在江湖紀錄片參與加分
+    battalionDocumentary?: BonusApplication | null;
+    onSubmitDocParticipation?: () => Promise<void>;
 }
 
 const BONUS_CONFIG: Array<{
@@ -140,6 +143,8 @@ export function WeeklyTopicTab({
     isCaptain = false,
     teamName = '',
     squadMemberCount = 0,
+    battalionDocumentary = null,
+    onSubmitDocParticipation,
 }: WeeklyTopicTabProps) {
     // ── 當前電影主題週期 ──
     const themePeriod = getCurrentThemePeriod();
@@ -320,6 +325,12 @@ export function WeeklyTopicTab({
     const bonusApps = bonusApplications.filter((a: BonusApplication) =>
         ['b3', 'b4', 'b5', 'b6', 'b7'].some(id => a.quest_id === id || a.quest_id.startsWith(id + '|'))
     );
+
+    // ── 紀錄片參與申請記錄 ──
+    const docMemberApp = bonusApplications.find((a: BonusApplication) => a.quest_id === 'doc1_member');
+
+    // ── 紀錄片參與提交 state ──
+    const [isSubmittingDocPart, setIsSubmittingDocPart] = useState(false);
 
     return (
         <div className="space-y-8 pb-10 animate-in slide-in-from-right-8 duration-500">
@@ -969,6 +980,72 @@ export function WeeklyTopicTab({
                     })}
                 </div>
             </section>
+
+            {/* ── 道在江湖紀錄片參與加分 ── */}
+            {battalionDocumentary && (
+                <section className="space-y-3">
+                    <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">道在江湖紀錄片參與加分</h2>
+                    <div className={`rounded-2xl border p-4 space-y-3 ${
+                        docMemberApp?.status === 'approved' ? 'bg-[#C0392B]/10 border-[#C0392B]/30 opacity-60'
+                        : docMemberApp ? 'bg-yellow-500/5 border-yellow-500/20'
+                        : 'bg-[#1B2A4A] border-[#16213E]'
+                    }`}>
+                        <div className="flex items-start gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-black/40 flex items-center justify-center text-white/70 shrink-0">
+                                <Clapperboard size={20} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className={`font-bold text-sm ${docMemberApp?.status === 'approved' ? 'text-[#C0392B]' : 'text-white'}`}>
+                                    道在江湖紀錄片參與加分
+                                </p>
+                                <p className="text-[10px] text-gray-500 mt-0.5">有實際參與拍攝的隊員可申請，由小隊長審核後入帳</p>
+                                <a
+                                    href={battalionDocumentary.interview_target}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[10px] text-blue-400 underline mt-1 block truncate"
+                                >
+                                    {battalionDocumentary.interview_target}
+                                </a>
+                            </div>
+                            <div className="text-right shrink-0">
+                                <p className={`font-black text-sm ${docMemberApp?.status === 'approved' ? 'text-[#C0392B]' : 'text-[#F5C842]'}`}>+10,000</p>
+                                {docMemberApp && docMemberApp.status !== 'rejected' && (
+                                    <p className={`text-[9px] font-bold ${BONUS_STATUS_LABELS[docMemberApp.status]?.color || 'text-gray-400'}`}>
+                                        {docMemberApp.status === 'approved' ? '已入帳' : '審核中'}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* 狀態顯示或申請按鈕 */}
+                        {!docMemberApp || docMemberApp.status === 'rejected' ? (
+                            <button
+                                onClick={async () => {
+                                    if (!onSubmitDocParticipation) return;
+                                    setIsSubmittingDocPart(true);
+                                    await onSubmitDocParticipation();
+                                    setIsSubmittingDocPart(false);
+                                }}
+                                disabled={isSubmittingDocPart || !onSubmitDocParticipation}
+                                className="w-full py-2.5 rounded-xl bg-[#F5C842] text-black font-black text-xs hover:bg-[#F5C842]/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {isSubmittingDocPart ? '提交中…' : '申請參與加分 +10,000'}
+                            </button>
+                        ) : (
+                            <div className={`text-center text-xs font-bold py-2 rounded-xl bg-black/20 ${BONUS_STATUS_LABELS[docMemberApp.status]?.color || 'text-gray-400'}`}>
+                                {BONUS_STATUS_LABELS[docMemberApp.status]?.label || docMemberApp.status}
+                            </div>
+                        )}
+
+                        {docMemberApp?.status === 'rejected' && (
+                            <p className="text-[10px] text-[#C0392B] font-bold">
+                                ⚠️ 上次申請已退回：{docMemberApp.squad_review_notes || '無備註'}
+                            </p>
+                        )}
+                    </div>
+                </section>
+            )}
 
             {/* ── 臨時加碼任務 ── */}
             {temporaryQuests.length > 0 && (

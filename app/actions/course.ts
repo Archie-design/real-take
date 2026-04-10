@@ -1,8 +1,7 @@
 'use server';
 
 import { createClient } from '@supabase/supabase-js';
-
-import { type CourseKey } from '@/lib/courseConfig';
+import { type Screening } from '@/types';
 
 const getSupabase = () => createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,7 +16,7 @@ const getSupabase = () => createClient(
 export async function registerForCourse(
     name: string,
     phone3: string,
-    courseKey: CourseKey
+    courseKey: string
 ): Promise<{ success: true; registrationId: string; userName: string } | { success: false; error: string }> {
     const trimmedName = name.trim();
     const trimmedPhone = phone3.trim();
@@ -40,7 +39,7 @@ export async function registerForCourse(
 
     const user = users[0];
 
-    // Check for existing registration (ON CONFLICT DO NOTHING pattern)
+    // Check for existing registration
     const { data: existing } = await getSupabase()
         .from('CourseRegistrations')
         .select('id')
@@ -74,7 +73,7 @@ export async function markAttendance(
     registrationId: string,
     note: string = 'admin'
 ): Promise<
-    | { success: true; userName: string; courseKey: CourseKey; alreadyCheckedIn: boolean }
+    | { success: true; userName: string; courseKey: string; alreadyCheckedIn: boolean }
     | { success: false; error: string }
 > {
     // Look up the registration
@@ -96,7 +95,7 @@ export async function markAttendance(
         .single();
 
     const userName = user?.Name ?? reg.user_id;
-    const courseKey = reg.course_key as CourseKey;
+    const courseKey = reg.course_key as string;
 
     // Check if already checked in
     const { data: existing } = await getSupabase()
@@ -123,10 +122,10 @@ export async function markAttendance(
 }
 
 /**
- * Get full attendance list for a course (admin use).
+ * Get full attendance list for a course (volunteer/admin use).
  */
 export async function getCourseAttendanceList(
-    courseKey: CourseKey
+    courseKey: string
 ): Promise<{ userId: string; userName: string; attendedAt: string }[]> {
     const { data, error } = await getSupabase()
         .from('CourseAttendance')
@@ -151,4 +150,70 @@ export async function getCourseAttendanceList(
         userName: nameMap.get(r.user_id) ?? r.user_id,
         attendedAt: r.attended_at,
     }));
+}
+
+// ── 場次管理（Screenings）────────────────────────────────────────────────
+
+/** 列出所有 active 場次，依日期升序（用於 CourseTab 前台） */
+export async function getScreenings(): Promise<Screening[]> {
+    const { data, error } = await getSupabase()
+        .from('Screenings')
+        .select('*')
+        .eq('active', true)
+        .order('date', { ascending: true });
+
+    if (error || !data) return [];
+    return data as Screening[];
+}
+
+/** 列出所有場次（含 inactive），用於後台管理 */
+export async function getAllScreenings(): Promise<Screening[]> {
+    const { data, error } = await getSupabase()
+        .from('Screenings')
+        .select('*')
+        .order('date', { ascending: true });
+
+    if (error || !data) return [];
+    return data as Screening[];
+}
+
+/** 新增場次（GM 後台） */
+export async function createScreening(data: {
+    id: string;
+    name: string;
+    date: string;
+    time: string;
+    location: string;
+}): Promise<{ success: boolean; error?: string }> {
+    const { error } = await getSupabase()
+        .from('Screenings')
+        .insert({ ...data, active: true });
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+}
+
+/** 更新場次（GM 後台） */
+export async function updateScreening(
+    id: string,
+    data: { name: string; date: string; time: string; location: string; active: boolean }
+): Promise<{ success: boolean; error?: string }> {
+    const { error } = await getSupabase()
+        .from('Screenings')
+        .update(data)
+        .eq('id', id);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+}
+
+/** 刪除場次（GM 後台） */
+export async function deleteScreening(id: string): Promise<{ success: boolean; error?: string }> {
+    const { error } = await getSupabase()
+        .from('Screenings')
+        .delete()
+        .eq('id', id);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
 }

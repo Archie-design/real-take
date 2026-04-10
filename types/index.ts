@@ -108,6 +108,16 @@ export interface BonusApplication {
 /** @deprecated 請改用 BonusApplication */
 export type W4Application = BonusApplication;
 
+export interface Screening {
+  id: string;
+  name: string;
+  date: string;       // YYYY-MM-DD
+  time: string;       // 顯示用，e.g. "19:00–21:40"
+  location: string;
+  active: boolean;
+  created_at?: string;
+}
+
 export interface AdminLog {
   id: string;
   action: string;

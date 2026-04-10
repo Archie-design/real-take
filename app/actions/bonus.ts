@@ -67,6 +67,7 @@ const BONUS_QUEST_CONFIG: Record<string, { reward: number; title: string }> = {
     b6: { reward: 5000, title: '報名聯誼會（2年）加分' },
     b7: { reward: 1000, title: '參加實體課程加分' },
     doc1: { reward: 10000, title: '道在江湖紀錄片' },
+    doc1_member: { reward: 10000, title: '道在江湖紀錄片參與加分' },
 };
 
 // ── 劇組長：初審 ─────────────────────────────────────────
@@ -114,8 +115,8 @@ export async function reviewBonusBySquadLeader(
         return { success: true, newStatus: 'rejected' };
     }
 
-    // b5/b6 聯誼會：小隊長初審即最終核准，直接入帳
-    const isNetworkingEvent = app.quest_id === 'b5' || app.quest_id === 'b6';
+    // b5/b6 聯誼會 / doc1_member 紀錄片參與：小隊長初審即最終核准，直接入帳
+    const isNetworkingEvent = ['b5', 'b6', 'doc1_member'].includes(app.quest_id);
 
     if (isNetworkingEvent) {
         const bonusInfo = BONUS_QUEST_CONFIG[app.quest_id];
@@ -142,14 +143,14 @@ export async function reviewBonusBySquadLeader(
         );
 
         if (!checkInRes.success) {
-            await logAdminAction('b5b6_squad_approve', reviewer.Name, appId, app.user_name, {
+            await logAdminAction('direct_squad_approve', reviewer.Name, appId, app.user_name, {
                 questId: app.quest_id,
                 checkInError: checkInRes.error,
             }, 'error');
             return { success: true, warning: '審核已核准，但入帳失敗：' + checkInRes.error };
         }
 
-        await logAdminAction('b5b6_squad_approve', reviewer.Name, appId, app.user_name, {
+        await logAdminAction('direct_squad_approve', reviewer.Name, appId, app.user_name, {
             questId: app.quest_id,
             reward: bonusInfo.reward,
         });
@@ -343,6 +344,64 @@ export async function getBonusApplications(filter: {
     const { data, error } = await query;
     if (error) return { success: false, error: error.message, applications: [] };
     return { success: true, applications: (data || []) as BonusApplication[] };
+}
+
+// ── 學員：申請紀錄片參與加分（doc1_member）────────────────────────────────
+export async function submitDocumentaryParticipation(
+    userId: string,
+    userName: string,
+    squadName: string | null,
+    battalionName: string | null,
+) {
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    const { data: existing } = await supabase
+        .from('BonusApplications')
+        .select('id, status')
+        .eq('user_id', userId)
+        .eq('quest_id', 'doc1_member')
+        .neq('status', 'rejected')
+        .maybeSingle();
+
+    if (existing) {
+        return { success: false, error: '已有紀錄片參與申請記錄，無法重複提交' };
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const { data, error } = await supabase
+        .from('BonusApplications')
+        .insert({
+            user_id: userId,
+            user_name: userName,
+            squad_name: squadName,
+            battalion_name: battalionName,
+            interview_target: '紀錄片參與申請',
+            interview_date: today,
+            quest_id: 'doc1_member',
+            status: 'pending',
+        })
+        .select()
+        .single();
+
+    if (error) return { success: false, error: '提交失敗：' + error.message };
+    return { success: true, application: data as BonusApplication };
+}
+
+// ── 查詢大隊的紀錄片提交記錄 ─────────────────────────────────────────────
+export async function getDocumentaryByBattalion(battalionName: string) {
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const { data, error } = await supabase
+        .from('BonusApplications')
+        .select('*')
+        .eq('quest_id', 'doc1')
+        .eq('battalion_name', battalionName)
+        .neq('status', 'rejected')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+    if (error) return { success: false, error: error.message, documentary: null };
+    return { success: true, documentary: (data as BonusApplication) || null };
 }
 
 // ── 查詢管理操作日誌 ──────────────────────────────────────

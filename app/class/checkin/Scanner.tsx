@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { markAttendance } from '@/app/actions/course';
-import { COURSE_INFO, type CourseKey } from '@/lib/courseConfig';
 
 interface ScanResult {
     type: 'success' | 'duplicate' | 'error';
@@ -11,17 +10,16 @@ interface ScanResult {
 }
 
 interface ScannerProps {
-    courseKey: CourseKey;
+    courseKey: string;
+    courseName?: string; // optional display name shown in the scanner UI
     onCheckedIn: () => void; // trigger parent to refresh attendance list
 }
 
-export default function Scanner({ courseKey, onCheckedIn }: ScannerProps) {
+export default function Scanner({ courseKey, courseName, onCheckedIn }: ScannerProps) {
     const scannerRef = useRef<Html5Qrcode | null>(null);
     const [scanResult, setScanResult] = useState<ScanResult | null>(null);
     const [scanning, setScanning] = useState(false);
     const cooldownRef = useRef(false);
-
-    const courseInfo = COURSE_INFO[courseKey];
 
     useEffect(() => {
         const html5QrCode = new Html5Qrcode('qr-reader');
@@ -69,7 +67,7 @@ export default function Scanner({ courseKey, onCheckedIn }: ScannerProps) {
     return (
         <div className="space-y-3">
             <p className="text-xs text-center text-slate-400">
-                正在掃描・{courseInfo.name}（{courseInfo.dateDisplay}）
+                正在掃描{courseName ? `・${courseName}` : ''}
             </p>
 
             {/* Camera viewfinder */}

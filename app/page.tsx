@@ -30,7 +30,9 @@ import { processCheckInTransaction, clearTodayLogs } from '@/app/actions/quest';
 import { importRostersData, autoAssignSquadsForTesting, logAdminAction } from '@/app/actions/admin';
 import { drawWeeklyQuestForSquad, autoDrawAllSquads, getSquadMembersStats, getBattalionMembersStats } from '@/app/actions/team';
 import { SquadMemberStats } from '@/types';
-import { submitInterviewApplication, reviewBonusBySquadLeader, reviewBonusByAdmin, getBonusApplications, getAdminActivityLog, submitBonusApplication } from '@/app/actions/bonus';
+import { submitInterviewApplication, reviewBonusBySquadLeader, reviewBonusByAdmin, getBonusApplications, getAdminActivityLog, submitBonusApplication, submitDocumentaryParticipation, getDocumentaryByBattalion } from '@/app/actions/bonus';
+import { getAllScreenings, createScreening, updateScreening, deleteScreening } from '@/app/actions/course';
+import { Screening } from '@/types';
 import { getSquadFineStatus, recordFinePayment, setPaidToCaptainDate, getSquadFinePaymentHistory, checkSquadFineCompliance, recordOrgSubmission, getSquadOrgSubmissions, getLastComplianceRun } from '@/app/actions/fines';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
@@ -69,6 +71,8 @@ export default function App() {
 
   const [myBonusApps, setMyBonusApps] = useState<BonusApplication[]>([]);
   const [pendingBonusApps, setPendingBonusApps] = useState<BonusApplication[]>([]);
+  const [battalionDocumentary, setBattalionDocumentary] = useState<BonusApplication | null>(null);
+  const [allScreenings, setAllScreenings] = useState<Screening[]>([]);
 
   const [pendingFinalReviewApps, setPendingFinalReviewApps] = useState<BonusApplication[]>([]);
   const [adminLogs, setAdminLogs] = useState<AdminLog[]>([]);
@@ -125,8 +129,27 @@ export default function App() {
       ]);
       if (w4Res.success) setPendingFinalReviewApps(w4Res.applications);
       if (logsRes.success) setAdminLogs(logsRes.logs as AdminLog[]);
+      getAllScreenings().then(setAllScreenings);
     } else {
       setModalMessage({ text: "密令錯誤，大會禁地不可擅闖。", type: 'error' });
+    }
+  };
+
+  const handleSubmitDocParticipation = async () => {
+    if (!userData) return;
+    const res = await submitDocumentaryParticipation(
+      userData.UserID, userData.Name,
+      userData.TeamName || null, userData.SquadName || null,
+    );
+    if (res.success && res.application) {
+      setMyBonusApps(prev => [res.application as BonusApplication, ...prev]);
+      if (userData.IsCaptain && userData.TeamName) {
+        const pendingRes = await getBonusApplications({ squadName: userData.TeamName, status: 'pending' });
+        if (pendingRes.success) setPendingBonusApps(pendingRes.applications);
+      }
+      setModalMessage({ text: '參與申請已提交，待小隊長審核。', type: 'success' });
+    } else {
+      setModalMessage({ text: res.error || '提交失敗', type: 'error' });
     }
   };
 
@@ -439,6 +462,26 @@ export default function App() {
     }
   };
 
+  const refreshAllScreenings = () => getAllScreenings().then(setAllScreenings);
+
+  const handleCreateScreening = async (data: { id: string; name: string; date: string; time: string; location: string }) => {
+    const res = await createScreening(data);
+    if (res.success) await refreshAllScreenings();
+    else setModalMessage({ text: res.error || '新增場次失敗', type: 'error' });
+  };
+
+  const handleUpdateScreening = async (id: string, data: { name: string; date: string; time: string; location: string; active: boolean }) => {
+    const res = await updateScreening(id, data);
+    if (res.success) await refreshAllScreenings();
+    else setModalMessage({ text: res.error || '更新場次失敗', type: 'error' });
+  };
+
+  const handleDeleteScreening = async (id: string) => {
+    const res = await deleteScreening(id);
+    if (res.success) await refreshAllScreenings();
+    else setModalMessage({ text: res.error || '刪除場次失敗', type: 'error' });
+  };
+
   const handleCheckInAction = async (quest: Quest) => {
     if (!userData) return;
     setIsSyncing(true);
@@ -725,6 +768,11 @@ export default function App() {
       getBonusApplications({ userId: userData.UserID }).then(res => {
         if (res.success) setMyBonusApps(res.applications);
       });
+      if (userData.SquadName) {
+        getDocumentaryByBattalion(userData.SquadName).then(res => {
+          if (res.success) setBattalionDocumentary(res.documentary);
+        });
+      }
     }
   }, [activeTab, userData?.UserID]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -879,6 +927,8 @@ export default function App() {
             isCaptain={!!(userData?.IsCaptain || userData?.IsGM)}
             teamName={userData?.TeamName || ''}
             squadMemberCount={squadMembers.length}
+            battalionDocumentary={battalionDocumentary}
+            onSubmitDocParticipation={handleSubmitDocParticipation}
           />
         )}
         {activeTab === 'rank' && <RankTab leaderboard={leaderboard} currentUserId={userData?.UserID} />}
@@ -916,7 +966,7 @@ export default function App() {
           />
         )}
         {activeTab === 'course' && userData && (
-          <CourseTab userData={userData} volunteerPassword={systemSettings.VolunteerPassword ?? ''} />
+          <CourseTab volunteerPassword={systemSettings.VolunteerPassword ?? ''} />
         )}
       </main>
 
@@ -969,6 +1019,10 @@ export default function App() {
           onImportRoster={handleImportRoster}
           onFinalReviewBonus={handleFinalReviewBonus}
           onClose={() => setView('login')}
+          screenings={allScreenings}
+          onCreateScreening={handleCreateScreening}
+          onUpdateScreening={handleUpdateScreening}
+          onDeleteScreening={handleDeleteScreening}
         />
       )}
 

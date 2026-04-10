@@ -3,35 +3,34 @@
 import { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import QRCode from 'react-qr-code';
-import { registerForCourse, getCourseAttendanceList } from '@/app/actions/course';
-import { COURSE_INFO, type CourseKey } from '@/lib/courseConfig';
-import { type CharacterStats } from '@/types';
+import { registerForCourse, getCourseAttendanceList, getScreenings } from '@/app/actions/course';
+import { type Screening } from '@/types';
 import { ChevronLeft, MapPin, Clock, CalendarDays, QrCode, UserCheck } from 'lucide-react';
 
 const Scanner = dynamic(() => import('@/app/class/checkin/Scanner'), { ssr: false });
-
-const STORAGE_KEYS: Record<CourseKey, string> = {
-    class_b: 'course_class_b_reg',
-    class_c: 'course_class_c_reg',
-};
 
 type RegResult = { registrationId: string; userName: string };
 type StudentView = 'select' | 'register' | 'qr';
 type TabView = 'student' | 'volunteer_login' | 'volunteer_scanner';
 
 interface CourseTabProps {
-    userData: CharacterStats;
     volunteerPassword: string;
+}
+
+function formatDateDisplay(dateStr: string): string {
+    const d = new Date(dateStr + 'T00:00:00');
+    const days = ['日', '一', '二', '三', '四', '五', '六'];
+    return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日（${days[d.getDay()]}）`;
 }
 
 export default function CourseTab({ volunteerPassword }: CourseTabProps) {
     const [tabView, setTabView] = useState<TabView>('student');
     const [studentView, setStudentView] = useState<StudentView>('select');
-    const [selectedCourse, setSelectedCourse] = useState<CourseKey | null>(null);
+    const [selectedCourse, setSelectedCourse] = useState<string | null>(null);
 
-    const [regResults, setRegResults] = useState<Record<CourseKey, RegResult | null>>({
-        class_b: null, class_c: null,
-    });
+    const [screenings, setScreenings] = useState<Screening[]>([]);
+    const [regResults, setRegResults] = useState<Record<string, RegResult | null>>({});
+    const [loadingScreenings, setLoadingScreenings] = useState(true);
 
     // Registration form state
     const [name, setName] = useState('');
@@ -42,24 +41,31 @@ export default function CourseTab({ volunteerPassword }: CourseTabProps) {
     // Volunteer state
     const [volPassword, setVolPassword] = useState('');
     const [volAuthError, setVolAuthError] = useState('');
-    const [volCourseKey, setVolCourseKey] = useState<CourseKey>('class_b');
+    const [volCourseKey, setVolCourseKey] = useState<string>('');
     const [attendanceList, setAttendanceList] = useState<{ userId: string; userName: string; attendedAt: string }[]>([]);
 
-    // Load from localStorage on mount
+    // Load screenings from DB + localStorage on mount
     useEffect(() => {
-        const loaded: Record<CourseKey, RegResult | null> = { class_b: null, class_c: null };
-        for (const key of Object.keys(STORAGE_KEYS) as CourseKey[]) {
-            try {
-                const raw = localStorage.getItem(STORAGE_KEYS[key]);
-                if (raw) loaded[key] = JSON.parse(raw);
-            } catch { /* ignore */ }
-        }
-        setRegResults(loaded);
+        getScreenings().then(list => {
+            setScreenings(list);
+            const loaded: Record<string, RegResult | null> = {};
+            for (const s of list) {
+                try {
+                    const raw = localStorage.getItem(`course_${s.id}_reg`);
+                    loaded[s.id] = raw ? JSON.parse(raw) : null;
+                } catch {
+                    loaded[s.id] = null;
+                }
+            }
+            setRegResults(loaded);
+            if (list.length > 0) setVolCourseKey(list[0].id);
+            setLoadingScreenings(false);
+        });
     }, []);
 
-    const handleSelectCourse = (key: CourseKey) => {
-        setSelectedCourse(key);
-        if (regResults[key]) {
+    const handleSelectCourse = (id: string) => {
+        setSelectedCourse(id);
+        if (regResults[id]) {
             setStudentView('qr');
         } else {
             setName('');
@@ -82,7 +88,7 @@ export default function CourseTab({ volunteerPassword }: CourseTabProps) {
         }
         const result: RegResult = { registrationId: res.registrationId, userName: res.userName };
         setRegResults(prev => ({ ...prev, [selectedCourse]: result }));
-        try { localStorage.setItem(STORAGE_KEYS[selectedCourse], JSON.stringify(result)); } catch { /* ignore */ }
+        try { localStorage.setItem(`course_${selectedCourse}_reg`, JSON.stringify(result)); } catch { /* ignore */ }
         setStudentView('qr');
     };
 
@@ -101,21 +107,20 @@ export default function CourseTab({ volunteerPassword }: CourseTabProps) {
         setTabView('volunteer_scanner');
     };
 
-    const loadAttendance = useCallback(async (key: CourseKey) => {
+    const loadAttendance = useCallback(async (key: string) => {
+        if (!key) return;
         const list = await getCourseAttendanceList(key);
         setAttendanceList(list);
     }, []);
 
-    const handleVolCourseChange = (key: CourseKey) => {
+    const handleVolCourseChange = (key: string) => {
         setVolCourseKey(key);
         loadAttendance(key);
     };
 
-    const courseKeys = Object.keys(COURSE_INFO) as CourseKey[];
-
     // ── Volunteer Scanner View ──────────────────────────────────────────────
     if (tabView === 'volunteer_scanner') {
-        const info = COURSE_INFO[volCourseKey];
+        const info = screenings.find(s => s.id === volCourseKey);
         return (
             <div className="px-4 pb-8 space-y-5 max-w-lg mx-auto">
                 <div className="flex items-center gap-3 pt-4">
@@ -129,29 +134,33 @@ export default function CourseTab({ volunteerPassword }: CourseTabProps) {
                 </div>
 
                 {/* Course selector */}
-                <div className="flex gap-2">
-                    {courseKeys.map(key => (
+                <div className="flex gap-2 flex-wrap">
+                    {screenings.map(s => (
                         <button
-                            key={key}
-                            onClick={() => handleVolCourseChange(key)}
+                            key={s.id}
+                            onClick={() => handleVolCourseChange(s.id)}
                             className={`flex-1 py-2.5 rounded-2xl text-xs font-black transition-all ${
-                                volCourseKey === key
+                                volCourseKey === s.id
                                     ? 'bg-red-600 text-white shadow-lg shadow-red-900/30'
                                     : 'bg-slate-800 text-slate-400'
                             }`}
                         >
-                            {COURSE_INFO[key].name}
+                            {s.name}
                         </button>
                     ))}
                 </div>
 
-                <div className="bg-slate-900 border border-slate-700/50 rounded-3xl p-4 space-y-1 text-xs text-slate-400">
-                    <p className="font-black text-white">{info.name}</p>
-                    <p>{info.dateDisplay}・{info.time}</p>
-                    <p>{info.location}</p>
-                </div>
+                {info && (
+                    <div className="bg-slate-900 border border-slate-700/50 rounded-3xl p-4 space-y-1 text-xs text-slate-400">
+                        <p className="font-black text-white">{info.name}</p>
+                        <p>{formatDateDisplay(info.date)}・{info.time}</p>
+                        <p>{info.location}</p>
+                    </div>
+                )}
 
-                <Scanner courseKey={volCourseKey} onCheckedIn={() => loadAttendance(volCourseKey)} />
+                {volCourseKey && (
+                    <Scanner courseKey={volCourseKey} courseName={info?.name} onCheckedIn={() => loadAttendance(volCourseKey)} />
+                )}
 
                 {/* Attendance list */}
                 <div className="space-y-2">
@@ -218,7 +227,7 @@ export default function CourseTab({ volunteerPassword }: CourseTabProps) {
     // ── Student QR View ─────────────────────────────────────────────────────
     if (studentView === 'qr' && selectedCourse) {
         const reg = regResults[selectedCourse];
-        const info = COURSE_INFO[selectedCourse];
+        const info = screenings.find(s => s.id === selectedCourse);
         return (
             <div className="px-4 pb-8 max-w-sm mx-auto space-y-5 pt-4">
                 <div className="flex items-center gap-3">
@@ -227,7 +236,7 @@ export default function CourseTab({ volunteerPassword }: CourseTabProps) {
                     </button>
                     <div>
                         <p className="text-[10px] text-amber-400 font-black uppercase tracking-widest">報名完成</p>
-                        <h2 className="text-lg font-black text-white">{info.name}・入場 QR 碼</h2>
+                        <h2 className="text-lg font-black text-white">{info?.name}・入場 QR 碼</h2>
                     </div>
                 </div>
 
@@ -245,27 +254,29 @@ export default function CourseTab({ volunteerPassword }: CourseTabProps) {
                     </p>
                 </div>
 
-                <div className="bg-slate-900 border border-slate-700/40 rounded-2xl px-5 py-4 space-y-2 text-sm text-slate-300">
-                    <div className="flex items-center gap-2">
-                        <CalendarDays size={13} className="text-slate-500 shrink-0" />
-                        <span>{info.dateDisplay}</span>
+                {info && (
+                    <div className="bg-slate-900 border border-slate-700/40 rounded-2xl px-5 py-4 space-y-2 text-sm text-slate-300">
+                        <div className="flex items-center gap-2">
+                            <CalendarDays size={13} className="text-slate-500 shrink-0" />
+                            <span>{formatDateDisplay(info.date)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Clock size={13} className="text-slate-500 shrink-0" />
+                            <span>{info.time}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <MapPin size={13} className="text-slate-500 shrink-0" />
+                            <span>{info.location}</span>
+                        </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <Clock size={13} className="text-slate-500 shrink-0" />
-                        <span>{info.time}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <MapPin size={13} className="text-slate-500 shrink-0" />
-                        <span>{info.location}</span>
-                    </div>
-                </div>
+                )}
             </div>
         );
     }
 
     // ── Registration Form ────────────────────────────────────────────────────
     if (studentView === 'register' && selectedCourse) {
-        const info = COURSE_INFO[selectedCourse];
+        const info = screenings.find(s => s.id === selectedCourse);
         return (
             <div className="px-4 pb-8 max-w-sm mx-auto space-y-5 pt-4">
                 <div className="flex items-center gap-3">
@@ -274,15 +285,17 @@ export default function CourseTab({ volunteerPassword }: CourseTabProps) {
                     </button>
                     <div>
                         <p className="text-[10px] text-red-400 font-black uppercase tracking-widest">活動報名</p>
-                        <h2 className="text-lg font-black text-white">{info.name}</h2>
+                        <h2 className="text-lg font-black text-white">{info?.name}</h2>
                     </div>
                 </div>
 
-                <div className="bg-slate-900 border border-slate-700/40 rounded-2xl px-5 py-4 space-y-1.5 text-sm text-slate-300">
-                    <div className="flex items-center gap-2"><CalendarDays size={13} className="text-slate-500 shrink-0" /><span>{info.dateDisplay}</span></div>
-                    <div className="flex items-center gap-2"><Clock size={13} className="text-slate-500 shrink-0" /><span>{info.time}</span></div>
-                    <div className="flex items-center gap-2"><MapPin size={13} className="text-slate-500 shrink-0" /><span>{info.location}</span></div>
-                </div>
+                {info && (
+                    <div className="bg-slate-900 border border-slate-700/40 rounded-2xl px-5 py-4 space-y-1.5 text-sm text-slate-300">
+                        <div className="flex items-center gap-2"><CalendarDays size={13} className="text-slate-500 shrink-0" /><span>{formatDateDisplay(info.date)}</span></div>
+                        <div className="flex items-center gap-2"><Clock size={13} className="text-slate-500 shrink-0" /><span>{info.time}</span></div>
+                        <div className="flex items-center gap-2"><MapPin size={13} className="text-slate-500 shrink-0" /><span>{info.location}</span></div>
+                    </div>
+                )}
 
                 <form onSubmit={handleRegister} className="bg-slate-900 border border-slate-700/50 rounded-3xl p-6 space-y-5">
                     <p className="text-xs text-slate-400">請填寫您的姓名及手機號碼末三碼以完成報名。</p>
@@ -339,53 +352,58 @@ export default function CourseTab({ volunteerPassword }: CourseTabProps) {
                 <h2 className="text-xl font-black text-white">影展場次領票</h2>
             </div>
 
-            <div className="space-y-3">
-                {courseKeys.map(key => {
-                    const info = COURSE_INFO[key];
-                    const reg = regResults[key];
-                    const isRegistered = !!reg;
+            {loadingScreenings ? (
+                <div className="text-center py-12 text-slate-500 text-sm">載入場次中…</div>
+            ) : screenings.length === 0 ? (
+                <div className="text-center py-12 text-slate-600 text-sm">目前尚無場次，敬請期待</div>
+            ) : (
+                <div className="space-y-3">
+                    {screenings.map(s => {
+                        const reg = regResults[s.id];
+                        const isRegistered = !!reg;
 
-                    return (
-                        <div
-                            key={key}
-                            className={`rounded-3xl border-2 p-5 space-y-3 transition-all ${
-                                isRegistered
-                                    ? 'bg-gradient-to-br from-amber-950/60 to-slate-900 border-amber-500/40 shadow-[0_0_20px_rgba(245,158,11,0.1)]'
-                                    : 'bg-slate-900 border-slate-700/50'
-                            }`}
-                        >
-                            <div className="flex items-start justify-between gap-3">
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <h3 className="font-black text-white text-base">{info.name}</h3>
-                                        {isRegistered && (
-                                            <span className="text-[10px] px-2 py-0.5 bg-amber-500/20 text-amber-400 font-black rounded-lg shrink-0">已報名</span>
-                                        )}
-                                    </div>
-                                    <div className="space-y-1 text-xs text-slate-400">
-                                        <div className="flex items-center gap-1.5"><CalendarDays size={11} className="text-slate-500 shrink-0" />{info.dateDisplay}</div>
-                                        <div className="flex items-center gap-1.5"><Clock size={11} className="text-slate-500 shrink-0" />{info.time}</div>
-                                        <div className="flex items-center gap-1.5"><MapPin size={11} className="text-slate-500 shrink-0" />{info.location}</div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <button
-                                onClick={() => handleSelectCourse(key)}
-                                className={`w-full py-3 rounded-2xl font-black text-sm transition-all active:scale-95 ${
+                        return (
+                            <div
+                                key={s.id}
+                                className={`rounded-3xl border-2 p-5 space-y-3 transition-all ${
                                     isRegistered
-                                        ? 'bg-amber-600 text-white hover:bg-amber-500 shadow-lg shadow-amber-900/30'
-                                        : 'bg-red-600 text-white hover:bg-red-500 shadow-lg shadow-red-900/20'
+                                        ? 'bg-gradient-to-br from-amber-950/60 to-slate-900 border-amber-500/40 shadow-[0_0_20px_rgba(245,158,11,0.1)]'
+                                        : 'bg-slate-900 border-slate-700/50'
                                 }`}
                             >
-                                {isRegistered
-                                    ? <><QrCode size={14} className="inline mr-1.5" />查看入場 QR 碼</>
-                                    : '立即報名'}
-                            </button>
-                        </div>
-                    );
-                })}
-            </div>
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <h3 className="font-black text-white text-base">{s.name}</h3>
+                                            {isRegistered && (
+                                                <span className="text-[10px] px-2 py-0.5 bg-amber-500/20 text-amber-400 font-black rounded-lg shrink-0">已報名</span>
+                                            )}
+                                        </div>
+                                        <div className="space-y-1 text-xs text-slate-400">
+                                            <div className="flex items-center gap-1.5"><CalendarDays size={11} className="text-slate-500 shrink-0" />{formatDateDisplay(s.date)}</div>
+                                            <div className="flex items-center gap-1.5"><Clock size={11} className="text-slate-500 shrink-0" />{s.time}</div>
+                                            <div className="flex items-center gap-1.5"><MapPin size={11} className="text-slate-500 shrink-0" />{s.location}</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={() => handleSelectCourse(s.id)}
+                                    className={`w-full py-3 rounded-2xl font-black text-sm transition-all active:scale-95 ${
+                                        isRegistered
+                                            ? 'bg-amber-600 text-white hover:bg-amber-500 shadow-lg shadow-amber-900/30'
+                                            : 'bg-red-600 text-white hover:bg-red-500 shadow-lg shadow-red-900/20'
+                                    }`}
+                                >
+                                    {isRegistered
+                                        ? <><QrCode size={14} className="inline mr-1.5" />查看入場 QR 碼</>
+                                        : '立即報名'}
+                                </button>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
 
             {/* Volunteer entry */}
             <div className="pt-2 text-center">

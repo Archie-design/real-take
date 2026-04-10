@@ -1,6 +1,6 @@
 import React from 'react';
-import { Settings, X, BarChart3, Save, Users, Lock, QrCode, AlertTriangle, Clapperboard, Sliders, UserCog } from 'lucide-react';
-import { SystemSettings, CharacterStats, TemporaryQuest, BonusApplication, AdminLog } from '@/types';
+import { Settings, X, BarChart3, Save, Users, Lock, QrCode, AlertTriangle, Clapperboard, Sliders, UserCog, Film, Plus, Pencil, Trash2, Check } from 'lucide-react';
+import { SystemSettings, CharacterStats, TemporaryQuest, BonusApplication, AdminLog, Screening } from '@/types';
 
 import { DAILY_QUEST_CONFIG, WEEKLY_QUEST_CONFIG } from '@/lib/constants';
 import { listAllMembers, transferMember, setMemberRole } from '@/app/actions/admin';
@@ -184,6 +184,10 @@ interface AdminDashboardProps {
     onImportRoster: (csvData: string) => Promise<void>;
     onFinalReviewBonus: (appId: string, approve: boolean, notes: string) => Promise<void>;
     onClose: () => void;
+    screenings: Screening[];
+    onCreateScreening: (data: { id: string; name: string; date: string; time: string; location: string }) => Promise<void>;
+    onUpdateScreening: (id: string, data: { name: string; date: string; time: string; location: string; active: boolean }) => Promise<void>;
+    onDeleteScreening: (id: string) => Promise<void>;
 }
 
 export function AdminDashboard({
@@ -192,7 +196,8 @@ export function AdminDashboard({
     pendingFinalReviewApps, adminLogs,
     onAddTempQuest, onToggleTempQuest, onDeleteTempQuest,
     onAutoDrawAllSquads,
-    onImportRoster, onFinalReviewBonus, onClose
+    onImportRoster, onFinalReviewBonus, onClose,
+    screenings, onCreateScreening, onUpdateScreening, onDeleteScreening,
 }: AdminDashboardProps) {
     const [csvInput, setCsvInput] = React.useState("");
     const [isImporting, setIsImporting] = React.useState(false);
@@ -200,6 +205,14 @@ export function AdminDashboard({
     const [reviewingW4Id, setReviewingW4Id] = React.useState<string | null>(null);
     const [volunteerPwd, setVolunteerPwd] = React.useState('');
     const [volPwdSaved, setVolPwdSaved] = React.useState(false);
+
+    // Screening management state
+    const [showNewScreeningForm, setShowNewScreeningForm] = React.useState(false);
+    const [newScreening, setNewScreening] = React.useState({ name: '', date: '', time: '', location: '' });
+    const [savingScreening, setSavingScreening] = React.useState(false);
+    const [editingScreeningId, setEditingScreeningId] = React.useState<string | null>(null);
+    const [editScreening, setEditScreening] = React.useState({ name: '', date: '', time: '', location: '', active: true });
+    const [deletingScreeningId, setDeletingScreeningId] = React.useState<string | null>(null);
     const [activeAdminTab, setActiveAdminTab] = React.useState<'members' | 'quests' | 'review' | 'system'>('members');
 
     // Fine Settings State
@@ -582,6 +595,149 @@ export function AdminDashboard({
                                 </button>
                             </div>
                             {volPwdSaved && <p className="text-xs text-teal-400 font-bold text-center">✅ 志工密碼已儲存</p>}
+                        </div>
+                    </section>
+
+                    {/* ── 影展場次管理 ── */}
+                    <section className="space-y-6 md:col-span-2">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-amber-400 font-black text-sm uppercase tracking-widest"><Film size={16} /> 影展場次管理</div>
+                            <button
+                                onClick={() => { setShowNewScreeningForm(v => !v); setNewScreening({ name: '', date: '', time: '', location: '' }); }}
+                                className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 text-white font-black text-xs rounded-xl hover:bg-amber-500 transition-colors"
+                            >
+                                <Plus size={13} /> 新增場次
+                            </button>
+                        </div>
+
+                        {/* 新增表單 */}
+                        {showNewScreeningForm && (
+                            <div className="bg-slate-900 border-2 border-amber-500/30 p-6 rounded-3xl space-y-4">
+                                <p className="text-xs text-slate-400 font-bold">新增影展場次</p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <input
+                                        placeholder="場次名稱"
+                                        value={newScreening.name}
+                                        onChange={e => setNewScreening(s => ({ ...s, name: e.target.value }))}
+                                        className="bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-white text-sm font-bold outline-none focus:border-amber-500"
+                                    />
+                                    <input
+                                        type="date"
+                                        value={newScreening.date}
+                                        onChange={e => setNewScreening(s => ({ ...s, date: e.target.value }))}
+                                        className="bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-white text-sm font-bold outline-none focus:border-amber-500"
+                                    />
+                                    <input
+                                        placeholder="時間（如 19:00–21:40）"
+                                        value={newScreening.time}
+                                        onChange={e => setNewScreening(s => ({ ...s, time: e.target.value }))}
+                                        className="bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-white text-sm font-bold outline-none focus:border-amber-500"
+                                    />
+                                    <input
+                                        placeholder="地點"
+                                        value={newScreening.location}
+                                        onChange={e => setNewScreening(s => ({ ...s, location: e.target.value }))}
+                                        className="bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-white text-sm font-bold outline-none focus:border-amber-500"
+                                    />
+                                </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={async () => {
+                                            if (!newScreening.name.trim() || !newScreening.date || !newScreening.time.trim() || !newScreening.location.trim()) return;
+                                            setSavingScreening(true);
+                                            await onCreateScreening({
+                                                id: `screen_${Date.now()}`,
+                                                ...newScreening,
+                                            });
+                                            setSavingScreening(false);
+                                            setShowNewScreeningForm(false);
+                                            setNewScreening({ name: '', date: '', time: '', location: '' });
+                                        }}
+                                        disabled={savingScreening || !newScreening.name.trim() || !newScreening.date || !newScreening.time.trim() || !newScreening.location.trim()}
+                                        className="flex-1 py-3 bg-amber-600 text-white font-black text-sm rounded-2xl hover:bg-amber-500 disabled:opacity-40 transition-colors"
+                                    >
+                                        {savingScreening ? '儲存中…' : '儲存場次'}
+                                    </button>
+                                    <button
+                                        onClick={() => setShowNewScreeningForm(false)}
+                                        className="px-5 py-3 bg-slate-800 text-slate-400 font-black text-sm rounded-2xl hover:text-white transition-colors"
+                                    >
+                                        取消
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 場次列表 */}
+                        <div className="space-y-3">
+                            {screenings.length === 0 && !showNewScreeningForm && (
+                                <p className="text-xs text-slate-600 text-center py-6">尚無場次，點擊「新增場次」開始建立</p>
+                            )}
+                            {screenings.map(s => (
+                                <div key={s.id} className={`bg-slate-900 border rounded-2xl p-4 space-y-3 ${s.active ? 'border-slate-700/50' : 'border-slate-800 opacity-50'}`}>
+                                    {editingScreeningId === s.id ? (
+                                        // 編輯模式
+                                        <div className="space-y-3">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                <input value={editScreening.name} onChange={e => setEditScreening(v => ({ ...v, name: e.target.value }))} placeholder="場次名稱" className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm font-bold outline-none focus:border-amber-500" />
+                                                <input type="date" value={editScreening.date} onChange={e => setEditScreening(v => ({ ...v, date: e.target.value }))} className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm font-bold outline-none focus:border-amber-500" />
+                                                <input value={editScreening.time} onChange={e => setEditScreening(v => ({ ...v, time: e.target.value }))} placeholder="時間" className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm font-bold outline-none focus:border-amber-500" />
+                                                <input value={editScreening.location} onChange={e => setEditScreening(v => ({ ...v, location: e.target.value }))} placeholder="地點" className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm font-bold outline-none focus:border-amber-500" />
+                                            </div>
+                                            <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+                                                <input type="checkbox" checked={editScreening.active} onChange={e => setEditScreening(v => ({ ...v, active: e.target.checked }))} className="w-4 h-4 rounded accent-amber-500" />
+                                                顯示於前台（啟用）
+                                            </label>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={async () => {
+                                                        setSavingScreening(true);
+                                                        await onUpdateScreening(s.id, editScreening);
+                                                        setSavingScreening(false);
+                                                        setEditingScreeningId(null);
+                                                    }}
+                                                    disabled={savingScreening}
+                                                    className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 text-white font-black text-xs rounded-xl hover:bg-amber-500 disabled:opacity-40 transition-colors"
+                                                >
+                                                    <Check size={13} /> 儲存
+                                                </button>
+                                                <button onClick={() => setEditingScreeningId(null)} className="px-4 py-2 bg-slate-800 text-slate-400 font-black text-xs rounded-xl hover:text-white transition-colors">取消</button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        // 顯示模式
+                                        <div className="flex items-start gap-3">
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <p className="font-black text-white text-sm">{s.name}</p>
+                                                    {!s.active && <span className="text-[9px] px-1.5 py-0.5 bg-slate-700 text-slate-500 font-black rounded">已停用</span>}
+                                                </div>
+                                                <p className="text-[11px] text-slate-400 mt-0.5">{s.date}・{s.time}</p>
+                                                <p className="text-[11px] text-slate-500">{s.location}</p>
+                                            </div>
+                                            <div className="flex gap-1.5 shrink-0">
+                                                <button
+                                                    onClick={() => { setEditingScreeningId(s.id); setEditScreening({ name: s.name, date: s.date, time: s.time, location: s.location, active: s.active }); }}
+                                                    className="p-2 bg-slate-800 text-slate-400 rounded-xl hover:text-amber-400 transition-colors"
+                                                    title="編輯"
+                                                >
+                                                    <Pencil size={14} />
+                                                </button>
+                                                {deletingScreeningId === s.id ? (
+                                                    <div className="flex gap-1">
+                                                        <button onClick={async () => { await onDeleteScreening(s.id); setDeletingScreeningId(null); }} className="px-2 py-1 bg-red-700 text-white font-black text-[10px] rounded-lg">確認</button>
+                                                        <button onClick={() => setDeletingScreeningId(null)} className="px-2 py-1 bg-slate-700 text-slate-400 font-black text-[10px] rounded-lg">取消</button>
+                                                    </div>
+                                                ) : (
+                                                    <button onClick={() => setDeletingScreeningId(s.id)} className="p-2 bg-slate-800 text-slate-400 rounded-xl hover:text-red-400 transition-colors" title="刪除">
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
                         </div>
                     </section>
                 </div>
