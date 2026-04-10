@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { CheckCircle2, XCircle, RefreshCw, Sword, Users, ChevronDown, ChevronUp, Film } from 'lucide-react';
 import { CharacterStats, BonusApplication, SquadMemberStats } from '@/types';
-import { reviewBonusByAdmin, submitBonusApplication, getBonusApplications } from '@/app/actions/bonus';
+import { reviewBonusByAdmin, submitBonusApplication, getBonusApplications, updateDocumentaryLink } from '@/app/actions/bonus';
 
 interface CommandantTabProps {
     userData: CharacterStats;
@@ -32,6 +32,9 @@ function DocumentarySubmission({
     const [submitting, setSubmitting] = useState(false);
     const [existingDoc, setExistingDoc] = useState<BonusApplication | null>(null);
     const [loaded, setLoaded] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editUrl, setEditUrl] = useState('');
+    const [saving, setSaving] = useState(false);
 
     React.useEffect(() => {
         getBonusApplications({}).then(res => {
@@ -42,21 +45,78 @@ function DocumentarySubmission({
             setLoaded(true);
         });
     }, [userData.SquadName]); // eslint-disable-line react-hooks/exhaustive-deps
+
     const isExpired = new Date().toISOString().slice(0, 10) > DOC_DEADLINE;
 
     if (!loaded) return <div className="bg-slate-900 border-2 border-amber-500/20 rounded-3xl p-5 text-center text-xs text-slate-500">載入中…</div>;
 
     if (existingDoc) {
-        const statusLabel = { pending: '待審', squad_approved: '待終審', approved: '已核准', rejected: '已駁回' }[existingDoc.status] || existingDoc.status;
-        const statusColor = existingDoc.status === 'approved' ? 'text-emerald-400' : existingDoc.status === 'rejected' ? 'text-red-400' : 'text-amber-400';
+        const handleSaveEdit = async () => {
+            if (!editUrl.trim()) { onShowMessage('請填入紀錄片連結', 'error'); return; }
+            setSaving(true);
+            const res = await updateDocumentaryLink(existingDoc.id, editUrl);
+            setSaving(false);
+            if (res.success) {
+                setExistingDoc(prev => prev ? { ...prev, interview_target: editUrl.trim() } : prev);
+                setIsEditing(false);
+                onShowMessage('連結已更新', 'success');
+            } else {
+                onShowMessage(res.error || '更新失敗', 'error');
+            }
+        };
+
         return (
-            <div className="bg-slate-900 border-2 border-amber-500/20 rounded-3xl p-5 space-y-2">
-                <h3 className="text-sm font-black text-white flex items-center gap-2"><Film size={15} className="text-amber-400" /> 道在江湖紀錄片</h3>
-                <p className="text-xs text-slate-400">本大隊已提交紀錄片申請</p>
-                <div className="flex items-center gap-2">
-                    <span className={`text-xs font-black ${statusColor}`}>{statusLabel}</span>
-                    <span className="text-[10px] text-slate-500">· {existingDoc.interview_target}</span>
-                </div>
+            <div className="bg-slate-900 border-2 border-amber-500/20 rounded-3xl p-5 space-y-3">
+                <h3 className="text-sm font-black text-white flex items-center gap-2">
+                    <Film size={15} className="text-amber-400" /> 道在江湖紀錄片
+                    <span className="text-[10px] text-emerald-400 font-black ml-auto">✅ 已上傳</span>
+                </h3>
+                {isEditing ? (
+                    <div className="space-y-2">
+                        <input
+                            type="url"
+                            autoFocus
+                            placeholder="新的紀錄片連結"
+                            value={editUrl}
+                            onChange={e => setEditUrl(e.target.value)}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-white text-xs outline-none focus:border-amber-500 transition-colors"
+                        />
+                        <div className="flex gap-2">
+                            <button
+                                onClick={handleSaveEdit}
+                                disabled={saving || !editUrl.trim()}
+                                className="flex-1 py-2.5 rounded-xl font-black text-xs text-white bg-amber-600 hover:bg-amber-500 active:scale-95 transition-all disabled:opacity-50"
+                            >
+                                {saving ? '儲存中…' : '儲存連結'}
+                            </button>
+                            <button
+                                onClick={() => setIsEditing(false)}
+                                className="px-4 py-2.5 rounded-xl font-black text-xs text-slate-400 bg-slate-800 hover:text-white transition-colors"
+                            >
+                                取消
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="space-y-2">
+                        <a
+                            href={existingDoc.interview_target}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[11px] text-blue-400 underline break-all block"
+                        >
+                            {existingDoc.interview_target}
+                        </a>
+                        {!isExpired && (
+                            <button
+                                onClick={() => { setEditUrl(existingDoc.interview_target); setIsEditing(true); }}
+                                className="text-[11px] text-slate-500 hover:text-amber-400 font-bold transition-colors underline underline-offset-2"
+                            >
+                                重新編輯連結
+                            </button>
+                        )}
+                    </div>
+                )}
             </div>
         );
     }
@@ -72,7 +132,7 @@ function DocumentarySubmission({
                 'doc1', videoUrl.trim(), today, desc
             );
             if (res.success) {
-                onShowMessage('紀錄片已提交，待管理員審核！', 'success');
+                onShowMessage('紀錄片已上傳！', 'success');
                 onRefresh();
                 setVideoUrl(''); setDesc('');
             } else {
@@ -228,14 +288,14 @@ export function CommandantTab({ userData, apps, onRefresh, onShowMessage, battal
             <DocumentarySubmission userData={userData} onRefresh={onRefresh} onShowMessage={onShowMessage} />
 
             {/* Application list */}
-            {apps.length === 0 ? (
+            {apps.filter(a => a.quest_id !== 'doc1').length === 0 ? (
                 <div className="bg-slate-900/60 border border-slate-700/40 rounded-3xl p-10 text-center">
                     <p className="text-slate-500 font-black text-sm">目前無待終審申請</p>
                     <p className="text-slate-600 text-xs mt-1">所有申請均已處理完畢</p>
                 </div>
             ) : (
                 <div className="flex flex-col gap-4">
-                    {apps.map(app => (
+                    {apps.filter(a => a.quest_id !== 'doc1').map(app => (
                         <div key={app.id} className="bg-slate-900 border-2 border-rose-500/20 rounded-3xl p-5 space-y-4 shadow-xl">
                             {/* App info */}
                             <div className="flex items-start justify-between gap-3">

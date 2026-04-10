@@ -304,8 +304,10 @@ export async function submitBonusApplication(
         ? `b7|${target.trim().toLowerCase().replace(/\s+/g, '_').slice(0, 60)}`
         : bonusType;
 
-    // b5、b6 需要截圖，送小隊長初審；doc1 直接送 GM 終審；其他送大隊長終審
-    const status = (bonusType === 'b5' || bonusType === 'b6') ? 'pending' : 'squad_approved';
+    // b5、b6 需要截圖，送小隊長初審；doc1 上傳即核准，無需審核；其他送大隊長終審
+    const status = (bonusType === 'b5' || bonusType === 'b6') ? 'pending'
+        : bonusType === 'doc1' ? 'approved'
+        : 'squad_approved';
 
     const { data, error } = await supabase
         .from('BonusApplications')
@@ -385,6 +387,19 @@ export async function submitDocumentaryParticipation(
 
     if (error) return { success: false, error: '提交失敗：' + error.message };
     return { success: true, application: data as BonusApplication };
+}
+
+// ── 大隊長：更新紀錄片連結 ───────────────────────────────────────────────
+export async function updateDocumentaryLink(appId: string, newUrl: string) {
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const { error } = await supabase
+        .from('BonusApplications')
+        .update({ interview_target: newUrl.trim() })
+        .eq('id', appId)
+        .eq('quest_id', 'doc1');
+
+    if (error) return { success: false, error: '更新失敗：' + error.message };
+    return { success: true };
 }
 
 // ── 查詢大隊的紀錄片提交記錄 ─────────────────────────────────────────────

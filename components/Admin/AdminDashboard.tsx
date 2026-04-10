@@ -504,10 +504,10 @@ export function AdminDashboard({
                     <section className="space-y-6">
                         <div className="flex items-center gap-2 text-pink-500 font-black text-sm uppercase tracking-widest">❤️ 待終審申請（傳愛 & 加分任務）</div>
                         <div className="bg-slate-900 border-2 border-pink-500/20 p-8 rounded-4xl shadow-xl space-y-4">
-                            {pendingFinalReviewApps.length === 0 ? (
+                            {pendingFinalReviewApps.filter(a => a.quest_id !== 'doc1').length === 0 ? (
                                 <p className="text-sm text-slate-500 text-center py-4">目前無待終審申請</p>
                             ) : (
-                                pendingFinalReviewApps.map(app => {
+                                pendingFinalReviewApps.filter(a => a.quest_id !== 'doc1').map(app => {
                                     const questBase = app.quest_id.split('|')[0];
                                     const isBonusApp = ['b3', 'b4', 'b5', 'b6', 'b7'].includes(questBase);
                                     const BONUS_LABELS: Record<string, string> = {
