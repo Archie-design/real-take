@@ -9,14 +9,11 @@ export interface CharacterStats {
   LastCheckIn: string | null;
   TotalFines: number;
   FinePaid: number;  // 已繳款累計（餘額 = TotalFines - FinePaid）
-  CurrentQ: number;
-  CurrentR: number;
   Email?: string;
   SquadName?: string;
   TeamName?: string;
   IsCaptain?: boolean;
   SquadRole?: string; // 小隊角色職稱（副隊長/抱抱/衡衡/叮叮1號/叮叮2號/樂樂）
-  Inventory?: string[];
   InitialFortunes?: Record<string, number>;
   Birthday?: string; // ISO date string YYYY-MM-DD
   IsCommandant?: boolean; // 大隊長

@@ -621,18 +621,18 @@ export default function App() {
     const newChar: any = {
       UserID: phone, Name: name.trim(),
       Level: 1, Exp: 0,
-      Streak: 0, LastCheckIn: null, TotalFines: 0, CurrentQ: 0, CurrentR: 0,
+      Streak: 0, LastCheckIn: null, TotalFines: 0,
       Email: email, InitialFortunes: fortunes
     };
 
     try {
-      if (email) {
-        const { data: rosterMatch } = await supabase.from('Rosters').select('*').eq('email', email).single();
-        if (rosterMatch) {
-          newChar.SquadName = rosterMatch.squad_name;
-          newChar.TeamName = rosterMatch.team_name;
-          newChar.IsCaptain = rosterMatch.is_captain;
-        }
+      // 以手機號（UserID）查詢名冊，自動套用小隊資料
+      const { data: rosterMatch } = await supabase.from('Rosters').select('*').eq('phone', phone).single();
+      if (rosterMatch) {
+        newChar.SquadName = rosterMatch.squad_name;
+        newChar.TeamName = rosterMatch.team_name;
+        newChar.IsCaptain = rosterMatch.is_captain;
+        newChar.IsCommandant = rosterMatch.is_commandant;
       }
       await supabase.from('CharacterStats').insert([newChar]);
       setUserData(newChar);

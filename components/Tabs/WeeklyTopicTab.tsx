@@ -68,6 +68,29 @@ const B3_OPTIONS = [
     '報名五運班'
 ];
 
+const B7_OPTIONS = [
+    '5/7 大方圓一階同學會',
+    '5/11 一階課後課',
+    '5/18 一階課後課',
+    '5/25 一階課後課',
+    '6/5 一階課後課',
+    '5/16-5/17 心之使者內訓',
+    '5/20-5/21 圓夢計畫初階',
+    '6/1 二階家長會議',
+    '6/6-6/9 二階大堂課',
+    '6/11-6/14 二階大堂課',
+    '6/16-6/19 二階大堂課',
+    '❤️ 6/22 親證班課後課',
+    '6/24 大方圓二階同學會',
+    '6/28 會長交接',
+    '6/29 三階家長會議',
+    '6/30 二階課後課',
+    '7/1 菁英領袖會議',
+    '7/4-7/7 三階大堂課',
+    '7/9-7/12 三階大堂課',
+    '7/14-7/17 三階大堂課',
+];
+
 const BONUS_STATUS_LABELS: Record<string, { label: string; color: string }> = {
     pending:       { label: '🟡 待劇組長初審', color: 'text-yellow-400' },
     squad_approved:{ label: '🔵 待發行商長終審', color: 'text-blue-400' },
@@ -905,15 +928,15 @@ export function WeeklyTopicTab({
                                             </button>
                                         ) : (
                                             <form onSubmit={handleBonusSubmit} className="space-y-2 text-left animate-in slide-in-from-top-2 duration-200">
-                                                {cfg.id === 'b3' ? (
+                                                {(cfg.id === 'b3' || cfg.id === 'b7') ? (
                                                     <select
                                                         required
                                                         value={bonusTarget}
                                                         onChange={e => setBonusTarget(e.target.value)}
                                                         className="w-full bg-[#16213E] border border-[#253A5C] rounded-xl px-3 py-2.5 text-white text-sm font-bold outline-none focus:border-[#F5C842] appearance-none cursor-pointer"
                                                     >
-                                                        <option value="">選擇報名課程…</option>
-                                                        {B3_OPTIONS.map(option => (
+                                                        <option value="">{cfg.id === 'b3' ? '選擇報名課程…' : '選擇課程場次…'}</option>
+                                                        {(cfg.id === 'b3' ? B3_OPTIONS : B7_OPTIONS).map(option => (
                                                             <option key={option} value={option}>{option}</option>
                                                         ))}
                                                     </select>
@@ -922,7 +945,7 @@ export function WeeklyTopicTab({
                                                         required
                                                         value={bonusTarget}
                                                         onChange={e => setBonusTarget(e.target.value)}
-                                                        placeholder={cfg.id === 'b7' ? '課程名稱' : cfg.id === 'b4' ? '小天使編號或說明' : '說明'}
+                                                        placeholder={cfg.id === 'b4' ? '小天使編號或說明' : '說明'}
                                                         className="w-full bg-[#16213E] border border-[#253A5C] rounded-xl px-3 py-2.5 text-white text-sm font-bold outline-none focus:border-[#F5C842] placeholder:text-gray-600"
                                                     />
                                                 )}

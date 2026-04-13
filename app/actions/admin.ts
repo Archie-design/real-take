@@ -2,6 +2,7 @@
 
 import { connectDb } from '@/lib/db';
 import { createClient } from '@supabase/supabase-js';
+import { standardizePhone } from '@/lib/utils/phone';
 
 const _supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const _supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -208,9 +209,10 @@ export async function importRostersData(csvContent: string) {
 
         for (const row of rows) {
             const cols = row.split(',').map(c => c.trim());
-            // Expecting: email, name, birthday, squad_name(發行商), team_name(劇組), is_captain, is_commandant
-            const email = cols[0]?.toLowerCase();
-            if (!email || !email.includes('@')) continue;
+            // Expecting: phone, name, birthday, squad_name(大隊), team_name(小隊), is_captain, is_commandant
+            const rawPhone = cols[0] || '';
+            const phone = rawPhone ? standardizePhone(rawPhone) : null;
+            if (!phone) continue; // 跳過未填手機號的列
 
             const name = cols[1] || null;
             const birthday = cols[2] && /^\d{4}-\d{2}-\d{2}$/.test(cols[2]) ? cols[2] : null;
@@ -220,9 +222,9 @@ export async function importRostersData(csvContent: string) {
             const is_commandant = String(cols[6]).toLowerCase() === 'true';
 
             await client.query(`
-                INSERT INTO "Rosters" (email, name, birthday, squad_name, team_name, is_captain, is_commandant)
+                INSERT INTO "Rosters" (phone, name, birthday, squad_name, team_name, is_captain, is_commandant)
                 VALUES ($1, $2, $3, $4, $5, $6, $7)
-                ON CONFLICT (email)
+                ON CONFLICT (phone)
                 DO UPDATE SET
                     name = EXCLUDED.name,
                     birthday = EXCLUDED.birthday,
@@ -230,15 +232,15 @@ export async function importRostersData(csvContent: string) {
                     team_name = EXCLUDED.team_name,
                     is_captain = EXCLUDED.is_captain,
                     is_commandant = EXCLUDED.is_commandant
-            `, [email, name, birthday, squad_name, team_name, is_captain, is_commandant]);
+            `, [phone, name, birthday, squad_name, team_name, is_captain, is_commandant]);
 
-            // If they already created a CharacterStat, automatically sync all fields
+            // 若成員已用手機號建立帳號，自動同步小隊資料
             await client.query(`
                 UPDATE "CharacterStats"
                 SET "SquadName" = $2, "TeamName" = $3, "IsCaptain" = $4, "IsCommandant" = $5,
                     "Birthday" = COALESCE($6, "Birthday")
-                WHERE "Email" = $1
-            `, [email, squad_name, team_name, is_captain, is_commandant, birthday]);
+                WHERE "UserID" = $1
+            `, [phone, squad_name, team_name, is_captain, is_commandant, birthday]);
 
             count++;
         }

@@ -346,12 +346,12 @@ export function AdminDashboard({
                             <form onSubmit={handleImportSubmit} className="space-y-4 text-center">
                                 <p className="text-xs text-slate-400 text-left">
                                     請貼上 CSV 格式資料（含表頭行將自動略過）<br />
-                                    格式：<span className="text-orange-400 font-mono">email, 姓名, 生日(YYYY-MM-DD), 發行商, 劇組, 是否劇組長, 是否發行商長</span>
+                                    格式：<span className="text-orange-400 font-mono">手機, 姓名, 生日(YYYY-MM-DD), 大隊, 小隊, 是否小隊長, 是否大隊長</span>
                                 </p>
                                 <textarea
                                     value={csvInput}
                                     onChange={(e) => setCsvInput(e.target.value)}
-                                    placeholder={`ex:\nuser1@gmail.com,王小明,1960-03-15,第一發行商,第一劇組,true,false\nuser2@gmail.com,李大華,1985-07-22,第一發行商,第一劇組,false,false`}
+                                    placeholder={`ex:\n0912345678,2100_傅云亭,,方圓大隊1,方圓1,true,false\n0923456789,7250_鄭淑姗,,方圓大隊1,方圓1,false,false`}
                                     className="w-full h-36 bg-slate-950 border border-slate-800 rounded-2xl p-4 text-white font-mono text-xs outline-none focus:border-orange-500 resize-none"
                                 />
                                 <button disabled={isImporting || !csvInput} className="w-full bg-emerald-600 p-4 rounded-2xl text-white font-black shadow-lg hover:bg-emerald-500 active:scale-95 transition-all disabled:opacity-50">
