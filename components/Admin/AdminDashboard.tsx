@@ -509,13 +509,16 @@ export function AdminDashboard({
                             ) : (
                                 pendingFinalReviewApps.filter(a => a.quest_id !== 'doc1').map(app => {
                                     const questBase = app.quest_id.split('|')[0];
-                                    const isBonusApp = ['b3', 'b4', 'b5', 'b6', 'b7'].includes(questBase);
+                                    const isBonusApp = ['b3', 'b4', 'b5', 'b6', 'b7', 'b8', 'b9', 'b10'].includes(questBase);
                                     const BONUS_LABELS: Record<string, string> = {
                                         b3: '續報高階/五運班 +5000',
                                         b4: '成為小天使 +5000',
                                         b5: '報名聯誼會（1年）+3000',
                                         b6: '報名聯誼會（2年）+5000',
                                         b7: '參加實體課程 +1000',
+                                        b8: '全程參與會長交接 +10000',
+                                        b9: '完成解圓夢計畫/復盤 +5000',
+                                        b10: '完成適應力挑戰計畫 +5000',
                                     };
                                     return (
                                     <div key={app.id} className="bg-slate-800 rounded-2xl p-5 space-y-3">

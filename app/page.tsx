@@ -154,7 +154,7 @@ export default function App() {
   };
 
   const handleSubmitBonusApp = async (
-    bonusType: 'b3' | 'b4' | 'b5' | 'b6' | 'b7',
+    bonusType: 'b3' | 'b4' | 'b5' | 'b6' | 'b7' | 'b8' | 'b9' | 'b10',
     target: string,
     date: string,
     desc: string,

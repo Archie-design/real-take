@@ -66,6 +66,9 @@ const BONUS_QUEST_CONFIG: Record<string, { reward: number; title: string }> = {
     b5: { reward: 3000, title: '報名聯誼會（1年）加分' },
     b6: { reward: 5000, title: '報名聯誼會（2年）加分' },
     b7: { reward: 1000, title: '參加實體課程加分' },
+    b8: { reward: 10000, title: '全程參與會長交接加分' },
+    b9: { reward: 5000, title: '完成解圓夢計畫或復盤加分' },
+    b10: { reward: 5000, title: '完成適應力挑戰計畫加分' },
     doc1: { reward: 10000, title: '道在江湖紀錄片' },
     doc1_member: { reward: 10000, title: '道在江湖紀錄片參與加分' },
 };
@@ -240,13 +243,13 @@ export async function reviewBonusByAdmin(
     return { success: true, newStatus };
 }
 
-// ── 學員：提交 b3–b7 / doc1 加分申請 ──────────────────────────────
+// ── 學員：提交 b3–b10 / doc1 加分申請 ──────────────────────────────
 export async function submitBonusApplication(
     userId: string,
     userName: string,
     squadName: string | null,
     battalionName: string | null,
-    bonusType: 'b3' | 'b4' | 'b5' | 'b6' | 'b7' | 'doc1',
+    bonusType: 'b3' | 'b4' | 'b5' | 'b6' | 'b7' | 'b8' | 'b9' | 'b10' | 'doc1',
     target: string,      // 申請描述（課程名稱 / 聯誼會 / 課程日期… / 紀錄片連結）
     date: string,        // YYYY-MM-DD
     description: string = '',
@@ -269,8 +272,8 @@ export async function submitBonusApplication(
         }
     }
 
-    // b3、b4、b5、b6 每人只能申請一次（未被駁回的情況下）
-    if (['b3', 'b4', 'b5', 'b6'].includes(bonusType)) {
+    // b3、b4、b5、b6、b8、b9、b10 每人只能申請一次（未被駁回的情況下）
+    if (['b3', 'b4', 'b5', 'b6', 'b8', 'b9', 'b10'].includes(bonusType)) {
         const { data: existing } = await supabase
             .from('BonusApplications')
             .select('id, status')

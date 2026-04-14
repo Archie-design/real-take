@@ -5,6 +5,7 @@ import {
     Phone, Mic, Award, Users, PhoneCall,
     GraduationCap, Sparkles, Handshake, BookOpen, Megaphone, Ticket, Upload,
     Film, Clapperboard, AlertTriangle, QrCode, RefreshCw, CheckCircle2, Loader2,
+    Crown, Target, Compass,
     type LucideIcon,
 } from 'lucide-react';
 import QRCode from 'react-qr-code';
@@ -26,7 +27,7 @@ interface WeeklyTopicTabProps {
     onCheckIn: (q: Quest) => void;
     onUndo: (q: Quest) => void;
     onSubmitInterview: (data: { interviewTarget: string; interviewDate: string; description: string; bonusType?: 'b1' | 'b2' }) => Promise<void>;
-    onSubmitBonusApp: (type: 'b3' | 'b4' | 'b5' | 'b6' | 'b7', target: string, date: string, desc: string, screenshotUrl?: string) => Promise<void>;
+    onSubmitBonusApp: (type: 'b3' | 'b4' | 'b5' | 'b6' | 'b7' | 'b8' | 'b9' | 'b10', target: string, date: string, desc: string, screenshotUrl?: string) => Promise<void>;
     questRewardOverrides?: Record<string, number>;
     disabledQuests?: string[];
     // 小隊定聚 QR 掃碼全員到齊
@@ -39,7 +40,7 @@ interface WeeklyTopicTabProps {
 }
 
 const BONUS_CONFIG: Array<{
-    id: 'b3' | 'b4' | 'b5' | 'b6' | 'b7';
+    id: 'b3' | 'b4' | 'b5' | 'b6' | 'b7' | 'b8' | 'b9' | 'b10';
     icon: string;
     title: string;
     sub: string;
@@ -51,6 +52,9 @@ const BONUS_CONFIG: Array<{
     { id: 'b5', icon: '🤝', title: '報名聯誼會（1年）', sub: '2026/1/16 後完款', reward: 3000, repeatable: false },
     { id: 'b6', icon: '🤝', title: '報名聯誼會（2年）', sub: '2026/1/16 後完款', reward: 5000, repeatable: false },
     { id: 'b7', icon: '📚', title: '參加實體課程', sub: '官網公告或全體系課程，連續幾天只算 1 次', reward: 1000, repeatable: true },
+    { id: 'b8', icon: '👑', title: '全程參與會長交接', sub: '6/28 會長交接全程參與', reward: 10000, repeatable: false },
+    { id: 'b9', icon: '🎯', title: '完成解圓夢計畫 or 復盤', sub: '與輔導員完成解圓夢計畫或復盤', reward: 5000, repeatable: false },
+    { id: 'b10', icon: '🧭', title: '完成適應力挑戰計畫', sub: '完成 21 天適應力突破計劃', reward: 5000, repeatable: false },
 ];
 
 const BONUS_ICON_MAP: Record<string, LucideIcon> = {
@@ -59,6 +63,9 @@ const BONUS_ICON_MAP: Record<string, LucideIcon> = {
     b5: Handshake,
     b6: Handshake,
     b7: BookOpen,
+    b8: Crown,
+    b9: Target,
+    b10: Compass,
 };
 
 const B3_OPTIONS = [
@@ -186,8 +193,8 @@ export function WeeklyTopicTab({
     const [w4Desc, setW4Desc] = useState('');
     const [isSubmittingW4, setIsSubmittingW4] = useState(false);
 
-    // ── b3-b7 加分申請 state ──
-    const [activeBonusForm, setActiveBonusForm] = useState<'b3' | 'b4' | 'b5' | 'b6' | 'b7' | null>(null);
+    // ── b3-b10 加分申請 state ──
+    const [activeBonusForm, setActiveBonusForm] = useState<'b3' | 'b4' | 'b5' | 'b6' | 'b7' | 'b8' | 'b9' | 'b10' | null>(null);
     const [bonusTarget, setBonusTarget] = useState('');
     const [bonusDate, setBonusDate] = useState(getLogicalDateStr(new Date()));
     const [bonusDesc, setBonusDesc] = useState('');
@@ -344,9 +351,9 @@ export function WeeklyTopicTab({
         ? logs.filter(l => l.QuestID.startsWith(t3Base + '|')).length
         : 0;
 
-    // ── b3-b7 申請記錄（從 bonusApplications 篩選）──
+    // ── b3-b10 申請記錄（從 bonusApplications 篩選）──
     const bonusApps = bonusApplications.filter((a: BonusApplication) =>
-        ['b3', 'b4', 'b5', 'b6', 'b7'].some(id => a.quest_id === id || a.quest_id.startsWith(id + '|'))
+        ['b3', 'b4', 'b5', 'b6', 'b7', 'b8', 'b9', 'b10'].some(id => a.quest_id === id || a.quest_id.startsWith(id + '|'))
     );
 
     // ── 紀錄片參與申請記錄 ──
@@ -880,7 +887,7 @@ export function WeeklyTopicTab({
                 </div>
             </section>
 
-            {/* ── b3–b7 其他加分任務申請 ── */}
+            {/* ── b3–b10 其他加分任務申請 ── */}
             <section className="space-y-3">
                 <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">其他加分任務申請</h2>
                 <div className="space-y-2">
@@ -945,7 +952,13 @@ export function WeeklyTopicTab({
                                                         required
                                                         value={bonusTarget}
                                                         onChange={e => setBonusTarget(e.target.value)}
-                                                        placeholder={cfg.id === 'b4' ? '小天使編號或說明' : '說明'}
+                                                        placeholder={
+                                                            cfg.id === 'b4' ? '小天使編號或說明'
+                                                            : cfg.id === 'b8' ? '會長交接活動說明'
+                                                            : cfg.id === 'b9' ? '輔導員姓名／完成日期說明'
+                                                            : cfg.id === 'b10' ? '挑戰計劃說明'
+                                                            : '說明'
+                                                        }
                                                         className="w-full bg-[#16213E] border border-[#253A5C] rounded-xl px-3 py-2.5 text-white text-sm font-bold outline-none focus:border-[#F5C842] placeholder:text-gray-600"
                                                     />
                                                 )}

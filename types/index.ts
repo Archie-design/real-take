@@ -87,10 +87,10 @@ export interface BonusApplication {
   user_name: string;
   squad_name?: string;
   battalion_name?: string;
-  interview_target: string;   // 訪談對象（w4）或報名項目描述（b3-b7）
+  interview_target: string;   // 訪談對象（w4）或報名項目描述（b3-b10）
   interview_date: string;     // YYYY-MM-DD
   description?: string;
-  quest_id: string;           // 'w4|date|target' 或 'b3'/'b4'/'b5'/'b6'/'b7|date'
+  quest_id: string;           // 'w4|date|target' 或 'b3'…'b10'/'b7|normalized'
   status: 'pending' | 'squad_approved' | 'approved' | 'rejected';
   squad_review_by?: string;
   squad_review_at?: string;
