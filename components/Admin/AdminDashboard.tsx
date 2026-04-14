@@ -346,7 +346,7 @@ export function AdminDashboard({
                             <form onSubmit={handleImportSubmit} className="space-y-4 text-center">
                                 <p className="text-xs text-slate-400 text-left">
                                     請貼上 CSV 格式資料（含表頭行將自動略過）<br />
-                                    格式：<span className="text-orange-400 font-mono">手機, 姓名, 生日(YYYY-MM-DD), 大隊, 小隊, 是否小隊長, 是否大隊長</span>
+                                    格式：<span className="text-orange-400 font-mono">手機, 姓名, 生日(YYYY-MM-DD), 大隊, 小隊, 是否小隊長, 是否大隊長, 介紹人, 輔導員, 輔導長</span>（後三欄可空白）
                                 </p>
                                 <textarea
                                     value={csvInput}
