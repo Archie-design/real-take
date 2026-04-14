@@ -101,7 +101,7 @@ export async function reviewW4BySquadLeader(
 // ── b3–b7 獎勵對照表 ─────────────────────────────────────
 const BONUS_QUEST_CONFIG: Record<string, { reward: number; title: string }> = {
     b3: { reward: 5000, title: '續報高階/五運班加分' },
-    b4: { reward: 5000, title: '成為小天使加分' },
+    b4: { reward: 5000, title: '成為心之使者加分' },
     b5: { reward: 3000, title: '報名聯誼會（1年）加分' },
     b6: { reward: 5000, title: '報名聯誼會（2年）加分' },
     b7: { reward: 1000, title: '參加實體課程加分' },

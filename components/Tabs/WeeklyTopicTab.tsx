@@ -252,7 +252,7 @@ export function WeeklyTopicTab({
         await onSubmitInterview({
             interviewTarget: w4Target,
             interviewDate: w4Date,
-            description: `[${w4BonusType === 'b2' ? '訂金5千以上' : '訂金5千以下'}] ${w4Desc}`.trim(),
+            description: `[${w4BonusType === 'b2' ? '完款' : '訂金'}] ${w4Desc}`.trim(),
             bonusType: w4BonusType,
         });
         setIsSubmittingW4(false);
@@ -516,7 +516,7 @@ export function WeeklyTopicTab({
                         <div className="w-10 h-10 rounded-xl bg-black/40 flex items-center justify-center text-white/70 shrink-0"><Phone size={22} /></div>
                         <div className="flex-1">
                             <p className="font-bold text-white text-sm">天使通話</p>
-                            <p className="text-[10px] text-gray-500">每週至少 1 次，最多 3 次 · +{a1Quest.reward}/次</p>
+                            <p className="text-[10px] text-gray-500">每週至少 1 次，無次數上限 · +{a1Quest.reward}/次</p>
                         </div>
                     </div>
                     <WeekCalendarRow
@@ -565,7 +565,7 @@ export function WeeklyTopicTab({
                 </div>
             </section>}
 
-            {/* ── w2：欣賞／肯定夥伴（每週最多 3 則，各不同人）── */}
+            {/* ── w2：欣賞／肯定夥伴（每週最多 1 則）── */}
             {w2Quest && <section className="space-y-3">
                 <div className="flex justify-between items-center px-1">
                     <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">欣賞／肯定夥伴</h2>
@@ -584,7 +584,7 @@ export function WeeklyTopicTab({
                         <div className="w-10 h-10 rounded-xl bg-black/40 flex items-center justify-center text-white/70 shrink-0"><Award size={22} /></div>
                         <div className="flex-1">
                             <p className="font-bold text-white text-sm">欣賞／肯定夥伴</p>
-                            <p className="text-[10px] text-gray-500">每次需為不同人，每週最多 3 則 · +{w2Quest.reward}/則</p>
+                                            <p className="text-[10px] text-gray-500">每週最多 1 則 · +{w2Quest.reward}/則</p>
                         </div>
                     </div>
                     <WeekCalendarRow
@@ -810,7 +810,7 @@ export function WeeklyTopicTab({
                         <div className="w-10 h-10 rounded-xl bg-black/40 flex items-center justify-center text-white/70 shrink-0"><Megaphone size={22} /></div>
                         <div className="flex-1">
                             <p className="font-bold text-white text-sm">傳愛（三層審核制）</p>
-                            <p className="text-[10px] text-gray-500">訂金 5千以下 +100 · 5千以上 +200</p>
+                            <p className="text-[10px] text-gray-500">訂金 +1,000 · 完款 +3,000</p>
                         </div>
                     </div>
 
@@ -830,7 +830,7 @@ export function WeeklyTopicTab({
                                     className="w-full mt-1 bg-[#16213E] border border-[#253A5C] rounded-2xl p-3.5 text-white font-bold outline-none focus:border-[#C0392B] text-sm" />
                             </div>
                             <div>
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">訂金金額</label>
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">傳愛類型</label>
                                 <div className="flex gap-2 mt-1">
                                     {(['b1', 'b2'] as const).map(type => (
                                         <button key={type} type="button"
@@ -838,7 +838,7 @@ export function WeeklyTopicTab({
                                             className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-all
                                                 ${w4BonusType === type ? 'bg-[#C0392B] text-white' : 'bg-[#16213E] text-gray-400 hover:bg-[#253A5C]'}`}
                                         >
-                                            {type === 'b1' ? '5千以下 +100' : '5千以上 +200'}
+                                            {type === 'b1' ? '訂金 +1,000' : '完款 +3,000'}
                                         </button>
                                     ))}
                                 </div>
