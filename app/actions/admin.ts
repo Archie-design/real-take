@@ -209,7 +209,7 @@ export async function importRostersData(csvContent: string) {
 
         for (const row of rows) {
             const cols = row.split(',').map(c => c.trim());
-            // Expecting: phone, name, birthday, squad_name(大隊), team_name(小隊), is_captain, is_commandant[, introducer, mentor, head_mentor]
+            // Expecting: phone, name, birthday, squad_name(大隊), team_name(小隊), is_captain, is_commandant[, introducer, mentor, head_mentor, system_id]
             const rawPhone = cols[0] || '';
             const phone = rawPhone ? standardizePhone(rawPhone) : null;
             if (!phone) continue; // 跳過未填手機號的列
@@ -223,10 +223,11 @@ export async function importRostersData(csvContent: string) {
             const introducer = cols[7] || null;
             const mentor = cols[8] || null;
             const head_mentor = cols[9] || null;
+            const system_id = cols[10] || null;
 
             await client.query(`
-                INSERT INTO "Rosters" (phone, name, birthday, squad_name, team_name, is_captain, is_commandant, introducer, mentor, head_mentor)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                INSERT INTO "Rosters" (phone, name, birthday, squad_name, team_name, is_captain, is_commandant, introducer, mentor, head_mentor, system_id)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 ON CONFLICT (phone)
                 DO UPDATE SET
                     name = EXCLUDED.name,
@@ -237,8 +238,9 @@ export async function importRostersData(csvContent: string) {
                     is_commandant = EXCLUDED.is_commandant,
                     introducer = EXCLUDED.introducer,
                     mentor = EXCLUDED.mentor,
-                    head_mentor = EXCLUDED.head_mentor
-            `, [phone, name, birthday, squad_name, team_name, is_captain, is_commandant, introducer, mentor, head_mentor]);
+                    head_mentor = EXCLUDED.head_mentor,
+                    system_id = EXCLUDED.system_id
+            `, [phone, name, birthday, squad_name, team_name, is_captain, is_commandant, introducer, mentor, head_mentor, system_id]);
 
             // 若成員已用手機號建立帳號，自動同步小隊資料
             await client.query(`

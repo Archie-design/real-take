@@ -346,7 +346,7 @@ export function AdminDashboard({
                             <form onSubmit={handleImportSubmit} className="space-y-4 text-center">
                                 <p className="text-xs text-slate-400 text-left">
                                     請貼上 CSV 格式資料（含表頭行將自動略過）<br />
-                                    格式：<span className="text-orange-400 font-mono">手機, 姓名, 生日(YYYY-MM-DD), 大隊, 小隊, 是否小隊長, 是否大隊長, 介紹人, 輔導員, 輔導長</span>（後三欄可空白）
+                                    格式：<span className="text-orange-400 font-mono">手機, 姓名, 生日(YYYY-MM-DD), 大隊, 小隊, 是否小隊長, 是否大隊長, 介紹人, 輔導員, 輔導長, 系統編號</span>（後四欄可空白）
                                 </p>
                                 <textarea
                                     value={csvInput}
@@ -509,16 +509,18 @@ export function AdminDashboard({
                             ) : (
                                 pendingFinalReviewApps.filter(a => a.quest_id !== 'doc1').map(app => {
                                     const questBase = app.quest_id.split('|')[0];
-                                    const isBonusApp = ['b3', 'b4', 'b5', 'b6', 'b7', 'b8', 'b9', 'b10'].includes(questBase);
+                                    const isBonusApp = ['b3', 'b4', 'b5', 'b6', 'b7', 'b8', 'b9', 'b10', 'b11', 'b12'].includes(questBase);
                                     const BONUS_LABELS: Record<string, string> = {
                                         b3: '續報高階/五運班 +5000',
-                                        b4: '成為小天使 +5000',
+                                        b4: '成為心之使者 +5000',
                                         b5: '報名聯誼會（1年）+3000',
                                         b6: '報名聯誼會（2年）+5000',
                                         b7: '參加實體課程 +1000',
                                         b8: '全程參與會長交接 +5000',
                                         b9: '完成解圓夢計畫/復盤 +5000',
                                         b10: '完成適應力挑戰計畫 +5000',
+                                        b11: '心之使者內訓 +5000',
+                                        b12: '對父母/伴侶完成三道菜 +3000',
                                     };
                                     return (
                                     <div key={app.id} className="bg-slate-800 rounded-2xl p-5 space-y-3">

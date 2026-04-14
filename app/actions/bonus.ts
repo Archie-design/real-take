@@ -61,16 +61,18 @@ export async function submitInterviewApplication(
 
 // ── b1–b7 獎勵對照表 ─────────────────────────────────────
 const BONUS_QUEST_CONFIG: Record<string, { reward: number; title: string }> = {
-    b1: { reward: 100, title: '傳愛（訂金5千以下）' },
-    b2: { reward: 200, title: '傳愛（訂金5千以上）' },
+    b1: { reward: 1000, title: '傳愛（訂金）' },
+    b2: { reward: 3000, title: '傳愛（完款）' },
     b3: { reward: 5000, title: '續報高階/五運班加分' },
-    b4: { reward: 5000, title: '成為小天使加分' },
+    b4: { reward: 5000, title: '成為心之使者加分' },
     b5: { reward: 3000, title: '報名聯誼會（1年）加分' },
     b6: { reward: 5000, title: '報名聯誼會（2年）加分' },
     b7: { reward: 1000, title: '參加實體課程加分' },
     b8: { reward: 5000, title: '全程參與會長交接加分' },
     b9: { reward: 5000, title: '完成解圓夢計畫或復盤加分' },
     b10: { reward: 5000, title: '完成適應力挑戰計畫加分' },
+    b11: { reward: 5000, title: '心之使者內訓加分' },
+    b12: { reward: 3000, title: '對父母/伴侶完成三道菜加分' },
     doc1: { reward: 10000, title: '道在江湖紀錄片' },
     doc1_member: { reward: 10000, title: '道在江湖紀錄片參與加分' },
 };
@@ -120,15 +122,16 @@ export async function reviewBonusBySquadLeader(
         return { success: true, newStatus: 'rejected' };
     }
 
-    // b5/b6 聯誼會 / doc1_member 紀錄片參與：小隊長初審即最終核准，直接入帳
-    const isNetworkingEvent = ['b5', 'b6', 'doc1_member'].includes(app.quest_id);
+    // b5/b6 聯誼會 / doc1_member 紀錄片參與 / b12 三道菜：小隊長初審即最終核准，直接入帳
+    const questBase = app.quest_id.split('|')[0];
+    const isNetworkingEvent = ['b5', 'b6', 'doc1_member', 'b12'].includes(questBase);
 
     if (isNetworkingEvent) {
         if (getLogicalDateStr() > END_DATE) {
             return { success: false, error: '活動已於 7/15 截止，無法核發分數。' };
         }
 
-        const bonusInfo = BONUS_QUEST_CONFIG[app.quest_id];
+        const bonusInfo = BONUS_QUEST_CONFIG[questBase];
 
         const { error: updateErr } = await supabase
             .from('BonusApplications')
@@ -221,8 +224,24 @@ export async function reviewBonusByAdmin(
 
         const questIdBase = app.quest_id.split('|')[0];
         const bonusInfo = BONUS_QUEST_CONFIG[questIdBase];
-        const reward = bonusInfo ? bonusInfo.reward : 1000;
-        const rewardTitle = bonusInfo ? bonusInfo.title : '星光電影推廣獎勵';
+        let reward = bonusInfo ? bonusInfo.reward : 1000;
+        let rewardTitle = bonusInfo ? bonusInfo.title : '星光電影推廣獎勵';
+
+        // b2 完款：若同一介紹人對同一對象已有核准的 b1 訂金，自動抵扣差額
+        if (questIdBase === 'b2') {
+            const { data: priorB1 } = await supabase
+                .from('BonusApplications')
+                .select('id')
+                .eq('user_id', app.user_id)
+                .eq('interview_target', app.interview_target)
+                .eq('status', 'approved')
+                .like('quest_id', 'b1|%')
+                .maybeSingle();
+            if (priorB1) {
+                reward -= BONUS_QUEST_CONFIG['b1'].reward; // 3000 - 1000 = 2000
+                rewardTitle += '（已抵扣訂金加分 1000）';
+            }
+        }
 
         const checkInRes = await processCheckInTransaction(
             app.user_id,
@@ -259,7 +278,7 @@ export async function submitBonusApplication(
     userName: string,
     squadName: string | null,
     battalionName: string | null,
-    bonusType: 'b3' | 'b4' | 'b5' | 'b6' | 'b7' | 'b8' | 'b9' | 'b10' | 'doc1',
+    bonusType: 'b3' | 'b4' | 'b5' | 'b6' | 'b7' | 'b8' | 'b9' | 'b10' | 'b11' | 'b12' | 'doc1',
     target: string,      // 申請描述（課程名稱 / 聯誼會 / 課程日期… / 紀錄片連結）
     date: string,        // YYYY-MM-DD
     description: string = '',
@@ -282,8 +301,8 @@ export async function submitBonusApplication(
         }
     }
 
-    // b3、b4、b5、b6、b8、b9、b10 每人只能申請一次（未被駁回的情況下）
-    if (['b3', 'b4', 'b5', 'b6', 'b8', 'b9', 'b10'].includes(bonusType)) {
+    // b3、b4、b5、b6、b8、b9、b10、b11 每人只能申請一次（未被駁回的情況下）
+    if (['b3', 'b4', 'b5', 'b6', 'b8', 'b9', 'b10', 'b11'].includes(bonusType)) {
         const { data: existing } = await supabase
             .from('BonusApplications')
             .select('id, status')
@@ -294,6 +313,30 @@ export async function submitBonusApplication(
 
         if (existing) {
             return { success: false, error: `${BONUS_QUEST_CONFIG[bonusType].title} 已有申請記錄，無法重複提交` };
+        }
+    }
+
+    // b12：對父母/伴侶完成三道菜，同一對象只算1次、全季最多3次
+    if (bonusType === 'b12') {
+        const b12QuestId = `b12|${target.trim().slice(0, 50)}`;
+        const { data: sameTarget } = await supabase
+            .from('BonusApplications')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('quest_id', b12QuestId)
+            .neq('status', 'rejected')
+            .maybeSingle();
+        if (sameTarget) {
+            return { success: false, error: `「${target}」已有申請記錄，同一對象只計算一次` };
+        }
+        const { data: allB12 } = await supabase
+            .from('BonusApplications')
+            .select('id')
+            .eq('user_id', userId)
+            .like('quest_id', 'b12|%')
+            .neq('status', 'rejected');
+        if ((allB12?.length ?? 0) >= 3) {
+            return { success: false, error: '三道菜已達 3 次上限' };
         }
     }
 
@@ -315,10 +358,12 @@ export async function submitBonusApplication(
     }
     const questId = bonusType === 'b7'
         ? `b7|${target.trim().toLowerCase().replace(/\s+/g, '_').slice(0, 60)}`
+        : bonusType === 'b12'
+        ? `b12|${target.trim().slice(0, 50)}`
         : bonusType;
 
-    // b5、b6 需要截圖，送小隊長初審；doc1 上傳即核准，無需審核；其他送大隊長終審
-    const status = (bonusType === 'b5' || bonusType === 'b6') ? 'pending'
+    // b5/b6/b12 送小隊長初審（初審即入帳）；doc1 上傳即核准，無需審核；其他送大隊長終審
+    const status = (bonusType === 'b5' || bonusType === 'b6' || bonusType === 'b12') ? 'pending'
         : bonusType === 'doc1' ? 'approved'
         : 'squad_approved';
 

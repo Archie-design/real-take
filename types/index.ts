@@ -33,6 +33,7 @@ export interface Roster {
   introducer?: string;    // 介紹人
   mentor?: string;        // 輔導員
   head_mentor?: string;   // 輔導長
+  system_id?: string;     // 系統編號
 }
 
 export interface TeamSettings {
