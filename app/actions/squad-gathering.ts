@@ -2,7 +2,8 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { processCheckInTransaction } from '@/app/actions/quest';
-import { SQUAD_THEME_CONFIG } from '@/lib/constants';
+import { SQUAD_THEME_CONFIG, END_DATE } from '@/lib/constants';
+import { getLogicalDateStr } from '@/lib/utils/time';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -91,6 +92,10 @@ export async function awardGatheringFullBonus(
         .eq('gathering_id', gatheringId);
 
     if (error) return { success: false, awarded: 0, errors: [error.message] };
+
+    if (getLogicalDateStr() > END_DATE) {
+        return { success: false, awarded: 0, errors: ['活動已於 7/15 截止，無法核發聚會獎勵。'] };
+    }
 
     const members = data || [];
     const questId = `${themeId}_full`;

@@ -2,7 +2,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { getLogicalDateStr } from '@/lib/utils/time';
-import { calculateLevelFromExp, FLEX_QUEST_IDS } from '@/lib/constants';
+import { calculateLevelFromExp, FLEX_QUEST_IDS, END_DATE } from '@/lib/constants';
 
 // Server-side Supabase client（使用 service role，繞過 RLS）
 function getServiceClient() {
@@ -20,6 +20,10 @@ export async function processCheckInTransaction(
 ) {
     const supabase = getServiceClient();
     const logicalTodayStr = getLogicalDateStr();
+
+    if (logicalTodayStr > END_DATE) {
+        return { success: false, error: '活動已於 7/15 截止，無法新增分數。' };
+    }
 
     // 在 TypeScript 端預算新等級（傳入 SQL function，一次完成所有更新）
     const { data: statsRow } = await supabase

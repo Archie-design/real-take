@@ -4,6 +4,8 @@ import { createClient } from '@supabase/supabase-js';
 import { BonusApplication } from '@/types';
 import { processCheckInTransaction } from '@/app/actions/quest';
 import { logAdminAction } from '@/app/actions/admin';
+import { END_DATE } from '@/lib/constants';
+import { getLogicalDateStr } from '@/lib/utils/time';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -66,7 +68,7 @@ const BONUS_QUEST_CONFIG: Record<string, { reward: number; title: string }> = {
     b5: { reward: 3000, title: '報名聯誼會（1年）加分' },
     b6: { reward: 5000, title: '報名聯誼會（2年）加分' },
     b7: { reward: 1000, title: '參加實體課程加分' },
-    b8: { reward: 10000, title: '全程參與會長交接加分' },
+    b8: { reward: 5000, title: '全程參與會長交接加分' },
     b9: { reward: 5000, title: '完成解圓夢計畫或復盤加分' },
     b10: { reward: 5000, title: '完成適應力挑戰計畫加分' },
     doc1: { reward: 10000, title: '道在江湖紀錄片' },
@@ -122,6 +124,10 @@ export async function reviewBonusBySquadLeader(
     const isNetworkingEvent = ['b5', 'b6', 'doc1_member'].includes(app.quest_id);
 
     if (isNetworkingEvent) {
+        if (getLogicalDateStr() > END_DATE) {
+            return { success: false, error: '活動已於 7/15 截止，無法核發分數。' };
+        }
+
         const bonusInfo = BONUS_QUEST_CONFIG[app.quest_id];
 
         const { error: updateErr } = await supabase
@@ -209,6 +215,10 @@ export async function reviewBonusByAdmin(
     if (updateErr) return { success: false, error: '終審更新失敗：' + updateErr.message };
 
     if (action === 'approve') {
+        if (getLogicalDateStr() > END_DATE) {
+            return { success: false, error: '活動已於 7/15 截止，無法核發分數。' };
+        }
+
         const questIdBase = app.quest_id.split('|')[0];
         const bonusInfo = BONUS_QUEST_CONFIG[questIdBase];
         const reward = bonusInfo ? bonusInfo.reward : 1000;

@@ -10,7 +10,7 @@ import {
 import { Quest, ZoneInfo } from '@/types';
 
 export const BASE_START_DATE_STR = "2026-02-01";
-export const END_DATE = "2026-06-28";
+export const END_DATE = "2026-07-15";
 export const PENALTY_PER_DAY = 50;
 
 /**

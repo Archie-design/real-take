@@ -52,7 +52,7 @@ const BONUS_CONFIG: Array<{
     { id: 'b5', icon: '🤝', title: '報名聯誼會（1年）', sub: '2026/1/16 後完款', reward: 3000, repeatable: false },
     { id: 'b6', icon: '🤝', title: '報名聯誼會（2年）', sub: '2026/1/16 後完款', reward: 5000, repeatable: false },
     { id: 'b7', icon: '📚', title: '參加實體課程', sub: '官網公告或全體系課程，連續幾天只算 1 次', reward: 1000, repeatable: true },
-    { id: 'b8', icon: '👑', title: '全程參與會長交接', sub: '6/28 會長交接全程參與', reward: 10000, repeatable: false },
+    { id: 'b8', icon: '👑', title: '全程參與會長交接', sub: '6/28 會長交接全程參與', reward: 5000, repeatable: false },
     { id: 'b9', icon: '🎯', title: '完成解圓夢計畫 or 復盤', sub: '與輔導員完成解圓夢計畫或復盤', reward: 5000, repeatable: false },
     { id: 'b10', icon: '🧭', title: '完成適應力挑戰計畫', sub: '完成 21 天適應力突破計劃', reward: 5000, repeatable: false },
 ];
