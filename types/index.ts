@@ -30,6 +30,9 @@ export interface Roster {
   is_captain?: boolean;   // 小隊長
   is_commandant?: boolean; // 大隊長
   squad_role?: string;    // 小隊角色職稱
+  introducer?: string;    // 介紹人
+  mentor?: string;        // 輔導員
+  head_mentor?: string;   // 輔導長
 }
 
 export interface TeamSettings {
