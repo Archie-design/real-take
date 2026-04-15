@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
     Phone, Mic, Award, Users, PhoneCall,
     GraduationCap, Sparkles, Handshake, BookOpen, Megaphone, Ticket, Upload,
@@ -150,6 +150,80 @@ function WeekCalendarRow({
                                         : 'bg-[#16213E] text-gray-500 hover:bg-[#253A5C] active:scale-90'}`}
                         >
                             {dayLabel}
+                        </button>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+// ── 月曆橫列（w3 小隊定聚專用，顯示整個月份）────────────────────────────────
+
+function MonthCalendarRow({
+    questId,
+    logs,
+    disabled,
+    logicalTodayStr,
+    onCheckIn,
+    onUndo,
+}: {
+    questId: string;
+    logs: DailyLog[];
+    disabled: boolean;
+    logicalTodayStr: string;
+    onCheckIn: (qId: string, day: Date) => void;
+    onUndo: (qId: string, day: Date) => void;
+}) {
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const todayRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (todayRef.current && scrollRef.current) {
+            const container = scrollRef.current;
+            const el = todayRef.current;
+            container.scrollLeft = el.offsetLeft - container.clientWidth / 2 + el.clientWidth / 2;
+        }
+    }, []);
+
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const dayLabels = ['日', '一', '二', '三', '四', '五', '六'];
+
+    return (
+        <div ref={scrollRef} className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
+            {Array.from({ length: daysInMonth }, (_, i) => {
+                const d = new Date(year, month, i + 1);
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const dd = String(d.getDate()).padStart(2, '0');
+                const dateStr = `${d.getFullYear()}-${mm}-${dd}`;
+                const qId = `${questId}|${dateStr}`;
+                const isDone = logs.some(l => l.QuestID === qId);
+                const isToday = dateStr === logicalTodayStr;
+                const isFuture = dateStr > logicalTodayStr;
+                const isDisabled = (disabled && !isDone) || isFuture;
+                return (
+                    <div
+                        key={i}
+                        ref={isToday ? todayRef : undefined}
+                        className="flex flex-col items-center gap-1 shrink-0"
+                    >
+                        <span className="text-[9px] text-gray-600 font-mono">{dayLabels[d.getDay()]}</span>
+                        <button
+                            disabled={isDisabled}
+                            onClick={() => isDone ? onUndo(questId, d) : onCheckIn(questId, d)}
+                            className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs transition-all
+                                ${isDone
+                                    ? 'bg-[#C0392B] text-white shadow-lg'
+                                    : isToday
+                                        ? 'bg-[#253A5C] text-white ring-1 ring-white/30'
+                                        : isDisabled
+                                            ? 'bg-[#16213E] text-gray-700 cursor-not-allowed'
+                                            : 'bg-[#16213E] text-gray-500 hover:bg-[#253A5C] active:scale-90'}`}
+                        >
+                            {d.getDate()}
                         </button>
                     </div>
                 );
@@ -346,8 +420,8 @@ export function WeeklyTopicTab({
     const w2Count = countThisWeek('w2');
     // w3/w4 月限：用本月
     const thisMonthStr = new Date().toISOString().slice(0, 7); // YYYY-MM
-    const w3CountMonth = logs.filter(l => l.QuestID.startsWith('w3|') && l.QuestID.slice(3, 10) >= thisMonthStr + '-01').length;
-    const w4CountMonth = logs.filter(l => l.QuestID.startsWith('w4|') && l.QuestID.slice(3, 10) >= thisMonthStr + '-01').length;
+    const w3CountMonth = logs.filter(l => l.QuestID.startsWith(`w3|${thisMonthStr}`)).length;
+    const w4CountMonth = logs.filter(l => l.QuestID.startsWith(`w4|${thisMonthStr}`)).length;
 
     // ── t3 沉澱週分享計數（依 t3QuestBase 為前綴）──
     const t3Base = themePeriod.t3QuestBase;
@@ -620,12 +694,11 @@ export function WeeklyTopicTab({
                             <p className="text-[10px] text-gray-500">每月最多 2 次 · 基礎 +{w3Quest.reward.toLocaleString()} · 另加主題獎勵</p>
                         </div>
                     </div>
-                    <WeekCalendarRow
+                    <MonthCalendarRow
                         questId="w3"
                         logs={logs}
-                        limit={2}
                         disabled={w3CountMonth >= 2}
-                        currentWeeklyMonday={currentWeeklyMonday}
+                        logicalTodayStr={logicalTodayStr}
                         {...makeWeekHandler('w3', w3Quest)}
                     />
 
