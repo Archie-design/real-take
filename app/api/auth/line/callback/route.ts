@@ -1,5 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { createHmac, timingSafeEqual } from 'crypto';
+
+// 驗證 bind state 的 HMAC 簽名
+// 有效期 10 分鐘；使用 timingSafeEqual 防止 timing attack
+// 回傳驗證通過的 uid，或 null（驗證失敗）
+function verifyBindState(state: string, secret: string): string | null {
+    const parts = state.split(':');
+    if (parts.length !== 4 || parts[0] !== 'bind') return null;
+
+    const [, uid, ts, sig] = parts;
+    const timestamp = Number(ts);
+    if (isNaN(timestamp) || Date.now() - timestamp > 10 * 60 * 1000) return null;
+
+    const expected = createHmac('sha256', secret)
+        .update(`${uid}:${ts}`)
+        .digest('hex')
+        .slice(0, 16);
+
+    try {
+        const sigBuf = Buffer.from(sig, 'hex');
+        const expBuf = Buffer.from(expected, 'hex');
+        if (sigBuf.length !== expBuf.length) return null;
+        if (!timingSafeEqual(sigBuf, expBuf)) return null;
+    } catch {
+        return null;
+    }
+
+    return uid || null;
+}
 
 // Handles LINE Login OAuth callback
 // GET /api/auth/line/callback?code=XXX&state=YYY
@@ -62,7 +91,8 @@ export async function GET(request: NextRequest) {
         // Step 3: Handle state
         if (state.startsWith('bind:')) {
             // Binding flow: link LINE account to existing game account
-            const uid = state.slice(5); // strip "bind:"
+            // 驗證 HMAC 簽名，防止攻擊者偽造 state 綁定他人帳號
+            const uid = verifyBindState(state, channelSecret!);
             if (!uid) {
                 return NextResponse.redirect(`${appUrl}/?line_error=invalid_state`);
             }
