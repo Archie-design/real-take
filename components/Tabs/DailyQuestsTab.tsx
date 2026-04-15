@@ -13,11 +13,13 @@ interface BodyQuestCardProps {
     doneTime?: string;
     reward: number;
     onCheckIn: () => void;
+    onUndo?: () => void;
     hasFineReminder?: boolean;
 }
 
-function BodyQuestCard({ isDawn, isDone, doneTime, reward, onCheckIn, hasFineReminder }: BodyQuestCardProps) {
+function BodyQuestCard({ isDawn, isDone, doneTime, reward, onCheckIn, onUndo, hasFineReminder }: BodyQuestCardProps) {
     return (
+        <div className="space-y-1">
         <button
             onClick={onCheckIn}
             disabled={isDone}
@@ -63,6 +65,15 @@ function BodyQuestCard({ isDawn, isDone, doneTime, reward, onCheckIn, hasFineRem
                 <p className="text-[10px] text-gray-500">積分</p>
             </div>
         </button>
+        {isDone && onUndo && (
+            <button
+                onClick={onUndo}
+                className="w-full py-1.5 rounded-2xl text-[11px] font-black text-gray-600 border border-slate-800 hover:border-slate-600 hover:text-gray-400 transition-colors active:scale-95"
+            >
+                撤銷
+            </button>
+        )}
+        </div>
     );
 }
 
@@ -347,9 +358,7 @@ export function DailyQuestsTab({
         .filter(q => FLEX_QUEST_IDS.has(q.id) && !disabledSet.has(q.id))
         .map(applyOverride);
     const flexDoneCount = todayLogs.filter(l => FLEX_QUEST_IDS.has(l.QuestID)).length;
-    // q1/q1_dawn 佔每日3種名額中的一個；totalDailyCount 用於停用判斷
-    const totalDailyCount = flexDoneCount + (bodyDone ? 1 : 0);
-    const flexSlotsLeft = Math.max(0, 3 - totalDailyCount);
+    const flexSlotsLeft = Math.max(0, 3 - flexDoneCount);
     const todayR1Count = todayLogs.filter(l => l.QuestID === 'r1').length;
     const isBodyDisabled = disabledSet.has('q1');
     const isR1Disabled = disabledSet.has('r1');
@@ -433,6 +442,11 @@ export function DailyQuestsTab({
                     doneTime={bodyLog ? formatCheckInTime(bodyLog.Timestamp) : undefined}
                     reward={bodyDisplayReward}
                     onCheckIn={handleBodyCheckIn}
+                    onUndo={bodyLog ? () => onUndo({
+                        id: bodyLog.QuestID,
+                        title: bodyLog.QuestTitle || '體運定課',
+                        reward: bodyLog.RewardPoints ?? bodyDisplayReward,
+                    }) : undefined}
                     hasFineReminder={isFineItem('q1') || isFineItem('q1_dawn')}
                 />
             </section>
