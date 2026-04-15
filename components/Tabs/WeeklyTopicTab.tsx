@@ -420,8 +420,10 @@ export function WeeklyTopicTab({
     const w2Count = countThisWeek('w2');
     // w3/w4 月限：用本月
     const thisMonthStr = new Date().toISOString().slice(0, 7); // YYYY-MM
-    const w3CountMonth = logs.filter(l => l.QuestID.startsWith(`w3|${thisMonthStr}`)).length;
-    const w4CountMonth = logs.filter(l => l.QuestID.startsWith(`w4|${thisMonthStr}`)).length;
+    // 只計 w3|YYYY-MM-DD（2 段）；排除 w3|date|target 等多段格式
+    const w3CountMonth = logs.filter(l => l.QuestID.startsWith(`w3|${thisMonthStr}`) && l.QuestID.split('|').length === 2).length;
+    // 只計 w4|YYYY-MM-DD（2 段）；排除 w4|date|對象名稱（傳愛格式）
+    const w4CountMonth = logs.filter(l => l.QuestID.startsWith(`w4|${thisMonthStr}`) && l.QuestID.split('|').length === 2).length;
 
     // ── t3 沉澱週分享計數（依 t3QuestBase 為前綴）──
     const t3Base = themePeriod.t3QuestBase;

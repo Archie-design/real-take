@@ -499,11 +499,6 @@ export default function App() {
         };
         setUserData(res.user as CharacterStats);
         setLogs(prev => [...prev, optimisticLog]);
-        // 背景同步：只有 DB 回傳的筆數 > 現有 state 才更新，避免短暫空值覆蓋樂觀更新
-        supabase.from('DailyLogs').select('*').eq('UserID', userData.UserID)
-          .then(({ data }) => {
-            if (data && data.length > 0) setLogs(data as DailyLog[]);
-          });
         setModalMessage(res.rewardCapped
           ? { text: "Action！打卡完成，今日三場已殺青，本次不計票房。", type: 'info' }
           : { text: "本場完美收鏡，票房長紅！", type: 'success' }
