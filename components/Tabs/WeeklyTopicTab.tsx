@@ -864,12 +864,11 @@ export function WeeklyTopicTab({
                             <p className="text-[10px] text-gray-500">每月最多 2 次 · +{w4Quest.reward.toLocaleString()}</p>
                         </div>
                     </div>
-                    <WeekCalendarRow
+                    <MonthCalendarRow
                         questId="w4"
                         logs={logs}
-                        limit={2}
                         disabled={w4CountMonth >= 2}
-                        currentWeeklyMonday={currentWeeklyMonday}
+                        logicalTodayStr={logicalTodayStr}
                         {...makeWeekHandler('w4', w4Quest)}
                     />
                 </div>
