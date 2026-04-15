@@ -195,14 +195,14 @@ function MonthCalendarRow({
     return (
         <div ref={scrollRef} className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
             {Array.from({ length: daysInMonth }, (_, i) => {
-                const d = new Date(year, month, i + 1);
-                const mm = String(d.getMonth() + 1).padStart(2, '0');
-                const dd = String(d.getDate()).padStart(2, '0');
-                const dateStr = `${d.getFullYear()}-${mm}-${dd}`;
-                const qId = `${questId}|${dateStr}`;
+                // 使用正午建立日期，確保 getLogicalDateStr 回傳當天日曆日，
+                // 避免午夜時刻被判為前一天導致 QuestID 與原始 log 不一致
+                const d = new Date(year, month, i + 1, 12, 0, 0);
+                const logicalDate = getLogicalDateStr(d);
+                const qId = `${questId}|${logicalDate}`;
                 const isDone = logs.some(l => l.QuestID === qId);
-                const isToday = dateStr === logicalTodayStr;
-                const isFuture = dateStr > logicalTodayStr;
+                const isToday = logicalDate === logicalTodayStr;
+                const isFuture = logicalDate > logicalTodayStr;
                 const isDisabled = (disabled && !isDone) || isFuture;
                 return (
                     <div
