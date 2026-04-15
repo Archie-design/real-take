@@ -18,14 +18,15 @@ interface BodyQuestCardProps {
 }
 
 function BodyQuestCard({ isDawn, isDone, doneTime, reward, onCheckIn, onUndo, hasFineReminder }: BodyQuestCardProps) {
+    const handleClick = () => {
+        if (isDone) { onUndo?.(); } else { onCheckIn(); }
+    };
     return (
-        <div className="space-y-1">
         <button
-            onClick={onCheckIn}
-            disabled={isDone}
+            onClick={handleClick}
             className={`w-full rounded-3xl border p-5 flex items-center gap-5 transition-all active:scale-95 text-left relative overflow-hidden
                 ${isDone
-                    ? 'bg-[#C0392B]/10 border-[#C0392B]/40 opacity-70 cursor-default'
+                    ? 'bg-[#C0392B]/10 border-[#C0392B]/40 opacity-70'
                     : isDawn
                         ? 'bg-black border-[#F5C842] shadow-[0_0_20px_rgba(212,175,55,0.25)] hover:border-yellow-300'
                         : 'bg-[#1B2A4A] border-[#253A5C] hover:border-gray-500'}`}
@@ -65,15 +66,6 @@ function BodyQuestCard({ isDawn, isDone, doneTime, reward, onCheckIn, onUndo, ha
                 <p className="text-[10px] text-gray-500">積分</p>
             </div>
         </button>
-        {isDone && onUndo && (
-            <button
-                onClick={onUndo}
-                className="w-full py-1.5 rounded-2xl text-[11px] font-black text-gray-600 border border-slate-800 hover:border-slate-600 hover:text-gray-400 transition-colors active:scale-95"
-            >
-                撤銷
-            </button>
-        )}
-        </div>
     );
 }
 
