@@ -47,7 +47,7 @@ const BONUS_CONFIG: Array<{
     reward: number;
     repeatable: boolean;
 }> = [
-    { id: 'b3', icon: '🎓', title: '續報高階/五運班', sub: '2026/1/16 後完款的皆可計算', reward: 5000, repeatable: false },
+    { id: 'b3', icon: '🎓', title: '續報高階/五運班', sub: '5/3之後報名才算，僅限新生報名，報名複訓不予計分', reward: 5000, repeatable: true },
     { id: 'b4', icon: '💫', title: '成為心之使者', sub: '2026 年度已是心之使者的皆可計算', reward: 5000, repeatable: false },
     { id: 'b5', icon: '🤝', title: '報名聯誼會（1年）', sub: '2026/1/16 後完款', reward: 3000, repeatable: false },
     { id: 'b6', icon: '🤝', title: '報名聯誼會（2年）', sub: '2026/1/16 後完款', reward: 5000, repeatable: false },
@@ -970,11 +970,23 @@ export function WeeklyTopicTab({
                 <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">其他加分任務申請</h2>
                 <div className="space-y-2">
                     {BONUS_CONFIG.map(cfg => {
-                        const existingApp = bonusApps.find(a =>
+                        // b3：逐選項追蹤，計算尚未提交（非已駁回）的剩餘選項
+                        const b3AvailableOpts = cfg.id === 'b3'
+                            ? B3_OPTIONS.filter(opt =>
+                                !bonusApps.some(a => a.quest_id === `b3|${opt}` && a.status !== 'rejected')
+                            )
+                            : B3_OPTIONS;
+
+                        // b3 使用 per-option 判斷；其他 non-repeatable 以 existingApp 判斷
+                        const existingApp = cfg.id === 'b3' ? undefined : bonusApps.find(a =>
                             a.quest_id === cfg.id || a.quest_id.startsWith(cfg.id + '|')
                         );
-                        const isApproved = existingApp?.status === 'approved';
-                        const isPending = existingApp && existingApp.status !== 'rejected' && existingApp.status !== 'approved';
+                        const isApproved = cfg.id === 'b3'
+                            ? b3AvailableOpts.length === 0
+                            : existingApp?.status === 'approved';
+                        const isPending = cfg.id === 'b3'
+                            ? false
+                            : !!(existingApp && existingApp.status !== 'rejected' && existingApp.status !== 'approved');
                         const isOpen = activeBonusForm === cfg.id;
 
                         return (
@@ -1021,7 +1033,7 @@ export function WeeklyTopicTab({
                                                         className="w-full bg-[#16213E] border border-[#253A5C] rounded-xl px-3 py-2.5 text-white text-sm font-bold outline-none focus:border-[#F5C842] appearance-none cursor-pointer"
                                                     >
                                                         <option value="">{cfg.id === 'b3' ? '選擇報名課程…' : '選擇課程場次…'}</option>
-                                                        {(cfg.id === 'b3' ? B3_OPTIONS : B7_OPTIONS).map(option => (
+                                                        {(cfg.id === 'b3' ? b3AvailableOpts : B7_OPTIONS).map(option => (
                                                             <option key={option} value={option}>{option}</option>
                                                         ))}
                                                     </select>
@@ -1041,6 +1053,23 @@ export function WeeklyTopicTab({
                                                         }
                                                         className="w-full bg-[#16213E] border border-[#253A5C] rounded-xl px-3 py-2.5 text-white text-sm font-bold outline-none focus:border-[#F5C842] placeholder:text-gray-600"
                                                     />
+                                                )}
+                                                {cfg.id === 'b3' && B3_OPTIONS.some(opt =>
+                                                    bonusApps.some(a => a.quest_id === `b3|${opt}` && a.status !== 'rejected')
+                                                ) && (
+                                                    <div className="flex flex-wrap gap-1.5 pt-1">
+                                                        {B3_OPTIONS.filter(opt =>
+                                                            bonusApps.some(a => a.quest_id === `b3|${opt}` && a.status !== 'rejected')
+                                                        ).map(opt => {
+                                                            const app = bonusApps.find(a => a.quest_id === `b3|${opt}` && a.status !== 'rejected');
+                                                            const done = app?.status === 'approved';
+                                                            return (
+                                                                <span key={opt} className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold ${done ? 'bg-emerald-900/40 text-emerald-400 border border-emerald-700/40' : 'bg-yellow-900/30 text-yellow-400 border border-yellow-700/30'}`}>
+                                                                    {done ? '✓' : '⏳'} {opt}
+                                                                </span>
+                                                            );
+                                                        })}
+                                                    </div>
                                                 )}
                                                 <input
                                                     required

@@ -301,8 +301,24 @@ export async function submitBonusApplication(
         }
     }
 
-    // b3、b4、b5、b6、b8、b9、b10、b11 每人只能申請一次（未被駁回的情況下）
-    if (['b3', 'b4', 'b5', 'b6', 'b8', 'b9', 'b10', 'b11'].includes(bonusType)) {
+    // b3：每個選項可各申請一次（quest_id = `b3|選項`）
+    if (bonusType === 'b3') {
+        const b3QuestId = `b3|${target.trim().slice(0, 50)}`;
+        const { data: existing } = await supabase
+            .from('BonusApplications')
+            .select('id, status')
+            .eq('user_id', userId)
+            .eq('quest_id', b3QuestId)
+            .neq('status', 'rejected')
+            .maybeSingle();
+
+        if (existing) {
+            return { success: false, error: `「${target}」已有申請記錄，無法重複提交` };
+        }
+    }
+
+    // b4、b5、b6、b8、b9、b10、b11 每人只能申請一次（未被駁回的情況下）
+    if (['b4', 'b5', 'b6', 'b8', 'b9', 'b10', 'b11'].includes(bonusType)) {
         const { data: existing } = await supabase
             .from('BonusApplications')
             .select('id, status')
@@ -356,7 +372,9 @@ export async function submitBonusApplication(
             return { success: false, error: `「${target}」已有申請記錄，同一課程/活動只計算一次` };
         }
     }
-    const questId = bonusType === 'b7'
+    const questId = bonusType === 'b3'
+        ? `b3|${target.trim().slice(0, 50)}`
+        : bonusType === 'b7'
         ? `b7|${target.trim().toLowerCase().replace(/\s+/g, '_').slice(0, 60)}`
         : bonusType === 'b12'
         ? `b12|${target.trim().slice(0, 50)}`
