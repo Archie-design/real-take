@@ -4,7 +4,7 @@ import {
     HeartHandshake, TreePine, Waves, Moon, Laugh, Music2, Sun,
     Salad, MicVocal, Target, PenLine, Music, Flower2, Bell,
     Phone, Mic, Award, Users, PhoneCall,
-    WandSparkles, Zap, Eye, Drum,
+    WandSparkles, Zap, Eye, Drum, Swords,
     type LucideIcon,
 } from 'lucide-react';
 import { Quest, ZoneInfo } from '@/types';
@@ -110,10 +110,10 @@ export const WEEKLY_QUEST_CONFIG: Quest[] = [
 // ── 小隊主題定聚任務（搭配 w3 使用）────────────────────────────────────────
 // 除 w3 基礎 +5000 外，另加主題分數；全員到齊再加成
 export const SQUAD_THEME_CONFIG = [
-    { id: 'sq1', title: '阿拉丁',   attr: '陽／適應力',     reward: 3000, bonusFull: 2000, icon: '🧞', desc: '帶領夥伴一起去掃公所，體驗突破適應力的過程' },
-    { id: 'sq2', title: 'F1賽車',   attr: '陰／找回初衷',   reward: 3000, bonusFull: 2000, icon: '🏎️', desc: '分享工作或生活中的卡關之處，如何轉念並訂立行動方案' },
-    { id: 'sq3', title: '獵魔女團', attr: '陰／接納不完美', reward: 3000, bonusFull: 2000, icon: '🔮', desc: '探討自己最不能接受的缺點，如何接納並化為優點' },
-    { id: 'sq4', title: '陣頭',     attr: '陽／主動吃苦',   reward: 3000, bonusFull: 2000, icon: '🥁', desc: '透過爬山主動吃向上的苦，透過彼此扶持體驗團隊力量' },
+    { id: 'sq1', title: '功夫熊貓',   attr: '陰／適應力',           reward: 3000, bonusFull: 2000, icon: '🐼', desc: '帶領夥伴一起參與戶外活動遊玩，練習適應力' },
+    { id: 'sq2', title: '真愛每一天', attr: '陰／父母婚姻的啟蒙',   reward: 3000, bonusFull: 2000, icon: '❤️', desc: '小隊長帶領小隊員一起寫對父母婚姻中的啟蒙（心態、行動，可以是卡片或日記）' },
+    { id: 'sq3', title: '獵魔女團',   attr: '陰／同質異質',         reward: 3000, bonusFull: 2000, icon: '🔮', desc: '與小隊哥一起探尋自己這週排行在後的弱點，並藉此成長自己' },
+    { id: 'sq4', title: '天外奇蹟',   attr: '陽／無條件付出',       reward: 3000, bonusFull: 2000, icon: '🎈', desc: 'EX. 去陪伴老人家、做義工等無條件付出的行動' },
 ];
 
 // ── Quest Icon Map（ID → Lucide Component）─────────────────────────────────
@@ -149,10 +149,10 @@ export const QUEST_ICON_MAP: Record<string, LucideIcon> = {
 
 // ── Squad Theme Icon Map（ID → Lucide Component）───────────────────────────
 export const SQUAD_THEME_ICON_MAP: Record<string, LucideIcon> = {
-    sq1: WandSparkles,   // 阿拉丁
-    sq2: Zap,            // F1賽車
-    sq3: Eye,            // 獵魔女團
-    sq4: Drum,           // 陣頭
+    sq1: Swords,          // 功夫熊貓
+    sq2: Heart,           // 真愛每一天
+    sq3: Eye,             // 獵魔女團
+    sq4: HeartHandshake,  // 天外奇蹟
 };
 
 export const SQUAD_ROLES = ['副隊長', '抱抱', '衡衡', '叮叮1號', '叮叮2號', '樂樂'] as const;
