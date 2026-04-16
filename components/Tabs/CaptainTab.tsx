@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ShieldAlert, Dices, Loader2, ChevronDown, ChevronUp, Banknote, CalendarCheck, Building2, Users } from 'lucide-react';
 import { DAILY_QUEST_CONFIG, SQUAD_ROLES } from '@/lib/constants';
-import { TeamSettings, BonusApplication, FinePaymentRecord, SquadFineSubmission, SquadMemberStats } from '@/types';
+import { TeamSettings, BonusApplication, FinePaymentRecord, SquadFineSubmission, SquadMemberStats, AngelCallPairingsData } from '@/types';
 // SquadFineSubmission used in orgSubmissions prop below
 
 interface SquadMemberFine {
@@ -41,6 +41,8 @@ interface CaptainTabProps {
     complianceResult: { periodLabel: string; violators: { userId: string; name: string; missingSum?: number; fineAdded?: number }[]; alreadyRun: boolean } | null;
     // 成員總覽
     squadMembers?: SquadMemberStats[];
+    // 天使通話配對
+    angelCallPairings?: AngelCallPairingsData;
 }
 
 
@@ -109,6 +111,7 @@ export function CaptainTab({
     squadFineMembers, fineHistory, orgSubmissions, onRecordPayment, onSetPaidToCaptainDate, onRecordOrgSubmission, isLoadingFines,
     onCheckW3Compliance, isCheckingCompliance, complianceResult,
     squadMembers = [],
+    angelCallPairings,
 }: CaptainTabProps) {
     const [isDrawing, setIsDrawing] = useState(false);
     const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
@@ -137,11 +140,9 @@ export function CaptainTab({
     });
 
     const weekMondayStr = getCurrentWeekMondayStr();
-    const alreadyDrawnThisWeek = teamSettings?.mandatory_quest_week === weekMondayStr;
-    const currentQuestId = teamSettings?.mandatory_quest_id;
-    const currentQuestName = DAILY_QUEST_CONFIG.find(q => q.id === currentQuestId)?.title;
-    const drawHistory: string[] = teamSettings?.quest_draw_history || [];
-    const remaining = DAILY_QUEST_CONFIG.filter(q => q.id.startsWith('q') && !drawHistory.includes(q.id));
+    // 天使通話配對
+    const thisSquadPairings = angelCallPairings?.pairings?.filter(p => p.teamName === teamName) || [];
+    const alreadyPairedThisWeek = !!angelCallPairings?.weekOf && angelCallPairings.weekOf === weekMondayStr && thisSquadPairings.length > 0;
 
     const handleDraw = async () => {
         setIsDrawing(true);
@@ -475,46 +476,44 @@ export function CaptainTab({
             </section>
 
             <section className="bg-slate-900 border-2 border-slate-800 p-8 rounded-4xl space-y-6 shadow-xl text-center">
-                <h3 className="text-lg font-black text-white border-b border-white/10 pb-4 text-left">🎲 本週推薦通告抽籤</h3>
+                <h3 className="text-lg font-black text-white border-b border-white/10 pb-4 text-left">👼 天使通話本週配對</h3>
 
-                {alreadyDrawnThisWeek && currentQuestName ? (
-                    <div className="space-y-3">
-                        <p className="text-xs text-slate-400 font-bold">本週已抽出</p>
-                        <div className="bg-indigo-900/30 border-2 border-indigo-500/50 rounded-3xl p-6">
-                            <p className="text-3xl font-black text-white">「{currentQuestName}」</p>
-                            <p className="text-xs text-indigo-400 mt-2 font-bold">週一 {weekMondayStr} 起生效</p>
+                {alreadyPairedThisWeek ? (
+                    <div className="space-y-4 text-left">
+                        <p className="text-xs text-slate-400 font-bold">本週（{weekMondayStr}）配對結果</p>
+                        <div className="space-y-2">
+                            {thisSquadPairings.map((pair, idx) => (
+                                <div key={idx} className="bg-indigo-900/30 border border-indigo-500/30 rounded-2xl px-4 py-3 flex items-center gap-2 flex-wrap">
+                                    {pair.group.map((m, mi) => (
+                                        <span key={m.id} className="flex items-center gap-1.5">
+                                            <span className="font-bold text-white text-sm">{m.name}</span>
+                                            {mi < pair.group.length - 1 && <span className="text-indigo-400 font-black">↔</span>}
+                                        </span>
+                                    ))}
+                                </div>
+                            ))}
                         </div>
-                        <p className="text-xs text-slate-500">下週一前無法再次抽籤</p>
+                        <button
+                            disabled={isDrawing}
+                            onClick={handleDraw}
+                            className="w-full py-2.5 rounded-xl bg-slate-800 text-slate-400 font-bold text-sm hover:bg-slate-700 transition-colors disabled:opacity-50"
+                        >
+                            {isDrawing ? '配對中…' : '🔄 重新配對本劇組'}
+                        </button>
+                        <p className="text-[10px] text-slate-600 text-center">重新配對將重洗本劇組的組合，不影響其他劇組</p>
                     </div>
                 ) : (
                     <div className="space-y-4">
                         <p className="text-xs text-slate-400 font-bold leading-relaxed">
-                            每週一 12:00 前抽選本週推薦通告。<br />
-                            已抽過的通告不重複，{remaining.length > 0 ? `尚餘 ${remaining.length} 項可抽` : '本輪已全部抽完，下次抽籤將重置循環'}。
+                            每週一執行天使通話配對，為本劇組成員隨機兩兩配對本週通話對象。
                         </p>
                         <button
                             disabled={isDrawing}
                             onClick={handleDraw}
                             className="w-full flex items-center justify-center gap-3 bg-indigo-600 p-5 rounded-2xl text-white font-black text-lg shadow-lg hover:bg-indigo-500 active:scale-95 transition-all disabled:opacity-50"
                         >
-                            <Dices size={22} /> {isDrawing ? '命運抽籤中...' : '🎲 抽選本週通告'}
+                            <Dices size={22} /> {isDrawing ? '配對中…' : '👼 執行本劇組天使通話配對'}
                         </button>
-                    </div>
-                )}
-
-                {drawHistory.length > 0 && (
-                    <div className="text-left space-y-2 mt-2">
-                        <p className="text-xs font-black text-slate-500 uppercase tracking-widest">本輪已抽歷程</p>
-                        <div className="flex flex-wrap gap-2">
-                            {drawHistory.map(id => {
-                                const name = DAILY_QUEST_CONFIG.find(q => q.id === id)?.title || id;
-                                return (
-                                    <span key={id} className={`px-3 py-1 rounded-xl text-xs font-bold ${id === currentQuestId ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400'}`}>
-                                        {name}
-                                    </span>
-                                );
-                            })}
-                        </div>
                     </div>
                 )}
             </section>

@@ -328,6 +328,66 @@ export async function runAngelCallPairing() {
     return { success: true, weekOf, pairings: allPairings };
 }
 
+// ── 天使通話配對（單一劇組）────────────────────────────────
+export async function runAngelCallPairingForSquad(squadName: string) {
+    const supabase = createClient(_supabaseUrl, _supabaseKey);
+
+    // 取本劇組成員
+    const { data: users, error } = await supabase
+        .from('CharacterStats')
+        .select('UserID, Name, TeamName')
+        .eq('TeamName', squadName);
+
+    if (error || !users || users.length < 2) {
+        return { success: false, error: '無法取得成員資料或成員不足2人' };
+    }
+
+    // 讀現有配對，移除此劇組舊資料
+    const { data: existing } = await supabase
+        .from('SystemSettings')
+        .select('Value')
+        .eq('SettingName', 'AngelCallPairings')
+        .maybeSingle();
+
+    const weekOf = (() => {
+        const now = new Date();
+        const day = now.getDay() || 7;
+        now.setDate(now.getDate() - (day - 1));
+        return now.toISOString().slice(0, 10);
+    })();
+
+    let existingPairings: Array<{ teamName: string; group: Array<{ id: string; name: string }> }> = [];
+    if (existing?.Value) {
+        try {
+            const parsed = JSON.parse(existing.Value);
+            existingPairings = (parsed.pairings || []).filter((p: any) => p.teamName !== squadName);
+        } catch (_) {}
+    }
+
+    // 重新配對此劇組
+    const members = users.map(u => ({ id: u.UserID, name: u.Name }));
+    const shuffled = [...members].sort(() => Math.random() - 0.5);
+    const newPairings: typeof existingPairings = [];
+    let i = 0;
+    while (i < shuffled.length) {
+        const remaining = shuffled.length - i;
+        if (remaining <= 1) break;
+        if (remaining <= 3) { newPairings.push({ teamName: squadName, group: shuffled.slice(i) }); break; }
+        newPairings.push({ teamName: squadName, group: shuffled.slice(i, i + 2) });
+        i += 2;
+    }
+
+    const allPairings = [...existingPairings, ...newPairings];
+    const { error: saveErr } = await supabase.from('SystemSettings').upsert(
+        { SettingName: 'AngelCallPairings', Value: JSON.stringify({ weekOf, pairings: allPairings }) },
+        { onConflict: 'SettingName' }
+    );
+    if (saveErr) return { success: false, error: '儲存失敗：' + saveErr.message };
+
+    await logAdminAction('angel_call_pairing_squad', squadName, undefined, undefined, { weekOf, pairCount: newPairings.length });
+    return { success: true, weekOf, pairings: allPairings };
+}
+
 // ── 玩家設定生日 ────────────────────────────────────────
 export async function saveBirthday(userId: string, birthday: string) {
     // Validate format YYYY-MM-DD

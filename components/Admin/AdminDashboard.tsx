@@ -435,7 +435,7 @@ export function AdminDashboard({
                         <div className="flex items-center gap-2 text-orange-500 font-black text-sm uppercase tracking-widest"><Settings size={16} /> 每週任務管理</div>
                         <div className="bg-slate-900 border-2 border-slate-800 p-8 rounded-4xl space-y-6 shadow-xl text-center">
                             <button onClick={onAutoDrawAllSquads} className="w-full bg-indigo-600 p-4 rounded-2xl text-white font-black shadow-lg hover:bg-indigo-500 transition-colors">
-                                🎲 全服自動抽籤（為未抽劇組代選本週通告）
+                                👼 全服天使通話配對（自動為全體劇組配對本週通話對象）
                             </button>
                         </div>
                     </section>

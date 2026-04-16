@@ -83,6 +83,7 @@ export interface SystemSettings {
   FineSettings?: FineSettings;
   QuestRewardOverrides?: Record<string, number>;  // 定課分值動態調整：questId → reward
   DisabledQuests?: string[];                       // 停用的定課 ID 列表
+  AngelCallPairings?: AngelCallPairingsData;       // 本週天使通話配對結果
 }
 
 export interface BonusApplication {

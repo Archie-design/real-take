@@ -27,8 +27,8 @@ import { CommandantTab } from '@/components/Tabs/CommandantTab';
 import CourseTab from '@/components/Tabs/CourseTab';
 import { AdminDashboard } from '@/components/Admin/AdminDashboard';
 import { processCheckInTransaction, clearTodayLogs } from '@/app/actions/quest';
-import { importRostersData, autoAssignSquadsForTesting, logAdminAction } from '@/app/actions/admin';
-import { drawWeeklyQuestForSquad, autoDrawAllSquads, getSquadMembersStats, getBattalionMembersStats } from '@/app/actions/team';
+import { importRostersData, autoAssignSquadsForTesting, logAdminAction, runAngelCallPairing, runAngelCallPairingForSquad } from '@/app/actions/admin';
+import { getSquadMembersStats, getBattalionMembersStats } from '@/app/actions/team';
 import { SquadMemberStats } from '@/types';
 import { submitInterviewApplication, reviewBonusBySquadLeader, reviewBonusByAdmin, getBonusApplications, getAdminActivityLog, submitBonusApplication, submitDocumentaryParticipation, getDocumentaryByBattalion } from '@/app/actions/bonus';
 import { getAllScreenings, createScreening, updateScreening, deleteScreening } from '@/app/actions/course';
@@ -228,17 +228,12 @@ export default function App() {
     if (!userData?.TeamName || !userData.IsCaptain) return;
     setIsSyncing(true);
     try {
-      const res = await drawWeeklyQuestForSquad(userData.TeamName, userData.UserID);
+      const res = await runAngelCallPairingForSquad(userData.TeamName);
       if (res.success) {
-        setTeamSettings((prev: any) => ({
-          ...prev,
-          mandatory_quest_id: res.questId,
-          mandatory_quest_week: res.weekLabel,
-          quest_draw_history: [...(prev?.quest_draw_history || []), res.questId],
-        }));
-        setModalMessage({ text: `本週推薦通告已抽出：「${res.questName}」`, type: 'success' });
+        setSystemSettings(prev => ({ ...prev, AngelCallPairings: { weekOf: res.weekOf!, pairings: res.pairings! } }));
+        setModalMessage({ text: '本劇組天使通話配對完成！', type: 'success' });
       } else {
-        setModalMessage({ text: res.error || '抽籤失敗', type: 'error' });
+        setModalMessage({ text: res.error || '配對失敗', type: 'error' });
       }
     } catch (e: any) {
       setModalMessage({ text: '系統異常：' + e.message, type: 'error' });
@@ -334,15 +329,15 @@ export default function App() {
   };
 
   const handleAutoDrawAllSquads = async () => {
-    if (!confirm("確定要為所有本週尚未抽籤的劇組自動抽選推薦通告？")) return;
+    if (!confirm("確定要為全體劇組執行天使通話配對？")) return;
     setIsSyncing(true);
     try {
-      const res = await autoDrawAllSquads();
+      const res = await runAngelCallPairing();
       if (res.success) {
-        const summary = res.drawn?.map((d: { squadName: string; questName: string }) => `${d.squadName}→${d.questName}`).join('、') || '（無）';
-        setModalMessage({ text: `自動抽籤完成！${res.drawnCount} 個劇組已抽選，${res.skippedCount} 個已跳過。\n${summary}`, type: 'success' });
+        setSystemSettings(prev => ({ ...prev, AngelCallPairings: { weekOf: res.weekOf!, pairings: res.pairings! } }));
+        setModalMessage({ text: `天使通話配對完成！共 ${res.pairings!.length} 組配對。`, type: 'success' });
       } else {
-        setModalMessage({ text: '自動抽籤失敗：' + res.error, type: 'error' });
+        setModalMessage({ text: '配對失敗：' + res.error, type: 'error' });
       }
     } catch (e: any) {
       setModalMessage({ text: '系統異常：' + e.message, type: 'error' });
@@ -665,12 +660,18 @@ export default function App() {
           if (sObj.DisabledQuests) parsedDisabledQuests = JSON.parse(sObj.DisabledQuests);
         } catch (_) {}
 
+        let parsedAngelCallPairings;
+        try {
+          if (sObj.AngelCallPairings) parsedAngelCallPairings = JSON.parse(sObj.AngelCallPairings);
+        } catch (_) {}
+
         setSystemSettings({
           RegistrationMode: (sObj.RegistrationMode as 'open' | 'roster') || 'open',
           VolunteerPassword: sObj.VolunteerPassword,
           FineSettings: parsedFineSettings,
           QuestRewardOverrides: parsedQuestRewardOverrides,
           DisabledQuests: parsedDisabledQuests,
+          AngelCallPairings: parsedAngelCallPairings,
         });
       }
 
@@ -924,6 +925,7 @@ export default function App() {
             squadMemberCount={squadMembers.length}
             battalionDocumentary={battalionDocumentary}
             onSubmitDocParticipation={handleSubmitDocParticipation}
+            angelCallPairings={systemSettings?.AngelCallPairings}
           />
         )}
         {activeTab === 'rank' && <RankTab leaderboard={leaderboard} currentUserId={userData?.UserID} />}
@@ -946,15 +948,17 @@ export default function App() {
             isCheckingCompliance={isCheckingCompliance}
             complianceResult={complianceResult}
             squadMembers={squadMembers}
+            angelCallPairings={systemSettings?.AngelCallPairings}
           />
         )}
         {activeTab === 'commandant' && showCommandantTab && userData && (
           <CommandantTab
             userData={userData}
-            apps={pendingFinalReviewApps}
+            apps={userData.IsGM ? pendingFinalReviewApps : pendingFinalReviewApps.filter(a => a.battalion_name === userData.SquadName)}
             onRefresh={async () => {
               const res = await getBonusApplications({ status: 'squad_approved' });
               if (res.success) setPendingFinalReviewApps(res.applications);
+              // 注意：filter 已在 apps prop 側處理，state 本身保持全量供 GM 使用
             }}
             onShowMessage={(msg, type) => setModalMessage({ text: msg, type })}
             battalionMembers={battalionMembers}

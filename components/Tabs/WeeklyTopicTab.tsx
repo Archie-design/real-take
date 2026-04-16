@@ -9,7 +9,7 @@ import {
     type LucideIcon,
 } from 'lucide-react';
 import QRCode from 'react-qr-code';
-import { Quest, DailyLog, SystemSettings, TemporaryQuest, BonusApplication, FineSettings } from '@/types';
+import { Quest, DailyLog, SystemSettings, TemporaryQuest, BonusApplication, FineSettings, AngelCallPairingsData } from '@/types';
 import { WEEKLY_QUEST_CONFIG, SQUAD_THEME_CONFIG, QUEST_ICON_MAP, SQUAD_THEME_ICON_MAP } from '@/lib/constants';
 import { getLogicalDateStr, getCurrentThemePeriod } from '@/lib/utils/time';
 import { getGatheringStatus, awardGatheringFullBonus, GatheringCheckin } from '@/app/actions/squad-gathering';
@@ -37,6 +37,8 @@ interface WeeklyTopicTabProps {
     // 道在江湖紀錄片參與加分
     battalionDocumentary?: BonusApplication | null;
     onSubmitDocParticipation?: () => Promise<void>;
+    // 天使通話配對
+    angelCallPairings?: AngelCallPairingsData;
 }
 
 const BONUS_CONFIG: Array<{
@@ -253,6 +255,7 @@ export function WeeklyTopicTab({
     squadMemberCount = 0,
     battalionDocumentary = null,
     onSubmitDocParticipation,
+    angelCallPairings,
 }: WeeklyTopicTabProps) {
     // ── 當前電影主題週期 ──
     const themePeriod = getCurrentThemePeriod();
@@ -593,6 +596,13 @@ export function WeeklyTopicTab({
                         <div className="flex-1">
                             <p className="font-bold text-white text-sm">天使通話</p>
                             <p className="text-[10px] text-gray-500">每週至少 1 次，無次數上限 · +{a1Quest.reward}/次</p>
+                            {(() => {
+                                const myGroup = angelCallPairings?.pairings?.find(p => p.group.some(m => m.id === userId));
+                                const partners = myGroup?.group.filter(m => m.id !== userId) || [];
+                                return partners.length > 0
+                                    ? <p className="text-[10px] text-indigo-400 font-bold mt-0.5">本週通話對象：{partners.map(m => m.name).join('、')}</p>
+                                    : <p className="text-[10px] text-gray-600 mt-0.5">本週尚未配對，請劇組長執行配對</p>;
+                            })()}
                         </div>
                     </div>
                     <WeekCalendarRow
@@ -1043,11 +1053,11 @@ export function WeeklyTopicTab({
                                                         value={bonusTarget}
                                                         onChange={e => setBonusTarget(e.target.value)}
                                                         placeholder={
-                                                            cfg.id === 'b4' ? '心之使者編號或說明'
-                                                            : cfg.id === 'b8' ? '會長交接活動說明'
+                                                            cfg.id === 'b4' ? '學員系統編號（官網可以查看）'
+                                                            : cfg.id === 'b8' ? '學員系統編號（官網可以查看）'
                                                             : cfg.id === 'b9' ? '輔導員姓名／完成日期說明'
                                                             : cfg.id === 'b10' ? '挑戰計劃說明'
-                                                            : cfg.id === 'b11' ? '訓練說明'
+                                                            : cfg.id === 'b11' ? '學員系統編號（官網可以查看）'
                                                             : cfg.id === 'b12' ? '對象（例：父親、伴侶）'
                                                             : '說明'
                                                         }
