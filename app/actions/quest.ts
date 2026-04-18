@@ -3,6 +3,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { getLogicalDateStr } from '@/lib/utils/time';
 import { calculateLevelFromExp, FLEX_QUEST_IDS, END_DATE } from '@/lib/constants';
+import { evaluateAchievements } from '@/app/actions/achievements';
 
 // Server-side Supabase client（使用 service role，繞過 RLS）
 function getServiceClient() {
@@ -55,7 +56,14 @@ export async function processCheckInTransaction(
         return { success: false, error: result.error };
     }
 
-    return { success: true, rewardCapped: result.rewardCapped ?? false, user: result.user };
+    // 成就評估（quest trigger）— 失敗不影響打卡回傳
+    let newlyUnlocked: Array<{ id: number; rarity: string; hint: string; description: string }> = [];
+    try {
+        const evalRes = await evaluateAchievements(userId, ['quest']);
+        if (evalRes.success) newlyUnlocked = evalRes.newlyUnlocked;
+    } catch { /* swallow */ }
+
+    return { success: true, rewardCapped: result.rewardCapped ?? false, user: result.user, newlyUnlocked };
 }
 
 export async function clearTodayLogs(userId: string) {

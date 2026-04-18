@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import { BonusApplication } from '@/types';
 import { processCheckInTransaction } from '@/app/actions/quest';
 import { logAdminAction } from '@/app/actions/admin';
+import { evaluateAchievements } from '@/app/actions/achievements';
 import { END_DATE } from '@/lib/constants';
 import { getLogicalDateStr } from '@/lib/utils/time';
 
@@ -167,6 +168,9 @@ export async function reviewBonusBySquadLeader(
             reward: bonusInfo.reward,
         });
 
+        // 成就評估：bonus 類 trigger（b/sq/doc1_member 等成就）
+        try { await evaluateAchievements(app.user_id, ['bonus']); } catch {}
+
         return { success: true, newStatus: 'approved' };
     }
 
@@ -262,6 +266,9 @@ export async function reviewBonusByAdmin(
             questId: app.quest_id,
             reward,
         });
+
+        // 成就評估：bonus 類 trigger
+        try { await evaluateAchievements(app.user_id, ['bonus']); } catch {}
     } else {
         await logAdminAction('bonus_final_reject', reviewerName, appId, app.user_name, {
             interviewTarget: app.interview_target,

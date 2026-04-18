@@ -29,6 +29,9 @@ Requires `.env.local` with:
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `DATABASE_URL` (direct PostgreSQL connection string to Supabase)
 
+Optional (fallbacks exist):
+- `NEXT_PUBLIC_ADMIN_PASSWORD` / `ADMIN_PASSWORD` — overrides the dev default `"123"` in `lib/constants.tsx`. Set both to the same value in production so client-side admin tab entry and server-side API routes agree.
+
 ## Architecture
 
 **real-take（大方圓開運親證班：這不是電影）** is a gamified check-in system for a real-life cultivation class (2026 大方圓開運親證班). Members complete daily/weekly quests and track personal growth goals. Game design spec is in `docs/GAME_DESIGN.md` — always treat this as the authoritative source of truth.
@@ -83,7 +86,7 @@ Primary gameplay currency:
 
 - `BASE_START_DATE_STR` / `END_DATE`: Season date range (Feb 1 – Jun 28, 2026)
 - `PENALTY_PER_DAY`: Fine amount per missed day (50)
-- `ADMIN_PASSWORD`: Hardcoded to `"123"` — dev-only, not a security boundary
+- `ADMIN_PASSWORD`: Falls back to `"123"` when neither `NEXT_PUBLIC_ADMIN_PASSWORD` nor `ADMIN_PASSWORD` env vars are set. Dev-only weak boundary — set env vars in production.
 - `ZONES`: The 6 zone definitions (pride/doubt/anger/greed/delusion/chaos)
 - `IN_GAME_ITEMS` (`i1`–`i10`): Purchasable shop items with `GameGold`
 - `MONSTER_DROP_ITEMS` (`d1`–`d7`): Monster-only drops stored in `CharacterStats.GameInventory`

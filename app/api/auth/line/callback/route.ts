@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createHmac, timingSafeEqual } from 'crypto';
+import { signSession, SESSION_COOKIE_NAME, SESSION_MAX_AGE_S } from '@/lib/auth/session';
 
 // 驗證 bind state 的 HMAC 簽名
 // 有效期 10 分鐘；使用 timingSafeEqual 防止 timing attack
@@ -30,12 +31,36 @@ function verifyBindState(state: string, secret: string): string | null {
     return uid || null;
 }
 
+// 驗證 login state 的 HMAC 簽名（對稱 bind state 做法）
+// 格式：login:{timestamp}:{sig16}；有效期 10 分鐘
+function verifyLoginState(state: string, secret: string): boolean {
+    const parts = state.split(':');
+    if (parts.length !== 3 || parts[0] !== 'login') return false;
+    const [, ts, sig] = parts;
+    const timestamp = Number(ts);
+    if (isNaN(timestamp) || Date.now() - timestamp > 10 * 60 * 1000) return false;
+
+    const expected = createHmac('sha256', secret)
+        .update(`login:${ts}`)
+        .digest('hex')
+        .slice(0, 16);
+
+    try {
+        const sigBuf = Buffer.from(sig, 'hex');
+        const expBuf = Buffer.from(expected, 'hex');
+        if (sigBuf.length !== expBuf.length) return false;
+        return timingSafeEqual(sigBuf, expBuf);
+    } catch {
+        return false;
+    }
+}
+
 // Handles LINE Login OAuth callback
 // GET /api/auth/line/callback?code=XXX&state=YYY
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const code = searchParams.get('code');
-    const state = searchParams.get('state') || 'login';
+    const state = searchParams.get('state') || '';
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
     if (!code) {
@@ -119,6 +144,11 @@ export async function GET(request: NextRequest) {
 
             return NextResponse.redirect(`${appUrl}/?line_bound=success`);
         } else {
+            // Login flow：驗證 state 的 HMAC，避免攻擊者直接誘導 callback
+            if (!verifyLoginState(state, channelSecret!)) {
+                return NextResponse.redirect(`${appUrl}/?line_error=invalid_state`);
+            }
+
             // Login flow: find user by LINE ID
             const { data: user } = await supabase
                 .from('CharacterStats')
@@ -130,9 +160,17 @@ export async function GET(request: NextRequest) {
                 return NextResponse.redirect(`${appUrl}/?line_error=not_bound`);
             }
 
-            // Encode UserID in URL (safe: it's a phone number)
-            const encoded = encodeURIComponent(user.UserID);
-            return NextResponse.redirect(`${appUrl}/?line_uid=${encoded}`);
+            // 簽發 HttpOnly session cookie，避免 UserID 暴露在 URL
+            const token = signSession(user.UserID as string, channelSecret);
+            const res = NextResponse.redirect(`${appUrl}/?line_login=ok`);
+            res.cookies.set(SESSION_COOKIE_NAME, token, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'lax',
+                path: '/',
+                maxAge: SESSION_MAX_AGE_S,
+            });
+            return res;
         }
     } catch {
         return NextResponse.redirect(`${appUrl}/?line_error=server`);

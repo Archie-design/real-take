@@ -9,8 +9,8 @@ import {
 } from 'lucide-react';
 import { Quest, ZoneInfo } from '@/types';
 
-export const BASE_START_DATE_STR = "2026-02-01";
-export const END_DATE = "2026-07-15";
+export const BASE_START_DATE_STR = "2026-05-04";
+export const END_DATE = "2026-07-20";
 export const PENALTY_PER_DAY = 50;
 
 /**
@@ -44,7 +44,12 @@ export function calculateLevelFromExp(exp: number): number {
     return currentLevel;
 }
 
-export const ADMIN_PASSWORD = "123";
+// 來源優先序：NEXT_PUBLIC_ADMIN_PASSWORD (client 端能讀) > ADMIN_PASSWORD (server 端) > "123" (dev 預設)
+// 注意：client component 只能讀到 NEXT_PUBLIC_* 變數；API route 可同時讀 ADMIN_PASSWORD。
+export const ADMIN_PASSWORD =
+    process.env.NEXT_PUBLIC_ADMIN_PASSWORD ??
+    process.env.ADMIN_PASSWORD ??
+    "123";
 
 export const ZONES: ZoneInfo[] = [
     { id: 'pride', name: '愛情片．甜蜜陷阱', char: '偶像明星', color: '#f8fafc', textColor: 'text-pink-400', icon: <Heart size={14} /> },

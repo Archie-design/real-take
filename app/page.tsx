@@ -6,11 +6,11 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import {
   AlertTriangle, CheckCircle2, Sparkles,
   Dice5, Loader2, RotateCcw,
-  CalendarDays, Clapperboard, Video
+  CalendarDays, Clapperboard, Video, Trophy
 } from 'lucide-react';
 import { FilmStripIcon, FilmReelIcon, Glasses3DIcon, MegaphoneIcon } from '@/components/ui/FilmIcons';
 
-import { CharacterStats, DailyLog, Quest, SystemSettings, TemporaryQuest, BonusApplication, AdminLog, FinePaymentRecord } from '@/types';
+import { CharacterStats, DailyLog, Quest, SystemSettings, TemporaryQuest, BonusApplication, AdminLog, FinePaymentRecord, PlayerAchievement } from '@/types';
 import { getLogicalDateStr, getWeeklyMonday } from '@/lib/utils/time';
 import { standardizePhone } from '@/lib/utils/phone';
 import { ADMIN_PASSWORD, calculateLevelFromExp } from '@/lib/constants';
@@ -25,6 +25,7 @@ import { RankTab } from '@/components/Tabs/RankTab';
 import { CaptainTab } from '@/components/Tabs/CaptainTab';
 import { CommandantTab } from '@/components/Tabs/CommandantTab';
 import CourseTab from '@/components/Tabs/CourseTab';
+import { AchievementsTab } from '@/components/Tabs/AchievementsTab';
 import { AdminDashboard } from '@/components/Admin/AdminDashboard';
 import { processCheckInTransaction, clearTodayLogs } from '@/app/actions/quest';
 import { importRostersData, autoAssignSquadsForTesting, logAdminAction, runAngelCallPairing, runAngelCallPairingForSquad } from '@/app/actions/admin';
@@ -55,13 +56,15 @@ export default function App() {
   const [view, setView] = useState<'login' | 'register' | 'app' | 'loading' | 'admin'>('loading');
   const [isSyncing, setIsSyncing] = useState(false);
   const [lineBannerDismissed, setLineBannerDismissed] = useState(false);
-  const [activeTab, setActiveTab] = useState<'daily' | 'weekly' | 'stats' | 'rank' | 'captain' | 'commandant' | 'course'>('daily');
+  const [activeTab, setActiveTab] = useState<'daily' | 'weekly' | 'stats' | 'rank' | 'captain' | 'commandant' | 'course' | 'achievements'>('daily');
   type GmViewMode = 'all' | 'player' | 'captain' | 'commandant';
   const [gmViewMode, setGmViewMode] = useState<GmViewMode>('all');
   const [userData, setUserData] = useState<CharacterStats | null>(null);
   const [logs, setLogs] = useState<DailyLog[]>([]);
   const [leaderboard, setLeaderboard] = useState<CharacterStats[]>([]);
   const [temporaryQuests, setTemporaryQuests] = useState<TemporaryQuest[]>([]);
+  const [playerAchievements, setPlayerAchievements] = useState<PlayerAchievement[]>([]);
+  const [unlockToast, setUnlockToast] = useState<{ id: number; rarity: string; description: string; hint: string } | null>(null);
   const [systemSettings, setSystemSettings] = useState<SystemSettings>({});
   const [modalMessage, setModalMessage] = useState<{ text: string, type: 'info' | 'error' | 'success' } | null>(null);
   const [undoTarget, setUndoTarget] = useState<Quest | null>(null);
@@ -498,6 +501,29 @@ export default function App() {
           ? { text: "Action！打卡完成，今日三場已殺青，本次不計票房。", type: 'info' }
           : { text: "本場完美收鏡，票房長紅！", type: 'success' }
         );
+
+        // 成就解鎖通知：把新解鎖的成就加入本地 state，並彈出 Toast
+        const unlocked = (res as { newlyUnlocked?: Array<{ id: number; rarity: string; hint: string; description: string }> }).newlyUnlocked || [];
+        if (unlocked.length > 0) {
+          const nowIso = new Date().toISOString();
+          setPlayerAchievements(prev => [
+            ...prev,
+            ...unlocked.map(u => ({
+              user_id: userData.UserID,
+              achievement_id: String(u.id),
+              unlocked_at: nowIso,
+              unlock_source: 'auto' as const,
+            })),
+          ]);
+          // 佇列化播放：一次只顯示一個 toast
+          (async () => {
+            for (const u of unlocked) {
+              setUnlockToast({ id: u.id, rarity: u.rarity, description: u.description, hint: u.hint });
+              await new Promise(r => setTimeout(r, 3200));
+            }
+            setUnlockToast(null);
+          })();
+        }
       } else {
         // Sync logs so client state reflects server state (e.g. quest already done)
         const { data: syncedLogs } = await supabase.from('DailyLogs').select('*').eq('UserID', userData.UserID);
@@ -582,9 +608,13 @@ export default function App() {
     const name = (fd.get('name') as string).trim();
     const phoneSuffix = (fd.get('phone') as string).trim();
     try {
-      const { data: allUsers, error: queryError } = await supabase.from('CharacterStats').select('*');
+      const { data: matches, error: queryError } = await supabase
+        .from('CharacterStats')
+        .select('UserID, Name, Email, Level, Exp, Streak, LastCheckIn, TotalFines, FinePaid, SquadName, TeamName, IsCaptain, SquadRole, InitialFortunes, Birthday, IsCommandant, IsGM, LineUserId')
+        .eq('Name', name)
+        .like('UserID', `%${phoneSuffix}`);
       if (queryError) throw new Error(queryError.message);
-      const match = (allUsers as CharacterStats[])?.find(u => u.Name === name && u.UserID.endsWith(phoneSuffix));
+      const match = (matches as CharacterStats[])?.[0];
       if (match) {
 
         const { data: userLogs } = await supabase.from('DailyLogs').select('*').eq('UserID', match.UserID);
@@ -686,18 +716,30 @@ export default function App() {
 
   useEffect(() => {
     const init = async () => {
-      // LINE OAuth session handoff — handle ?line_uid, ?line_bound, ?line_error params
+      // LINE OAuth session handoff — handle ?line_login=ok (cookie set), ?line_bound, ?line_error params
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search);
-        const lineUid = params.get('line_uid');
+        const lineLogin = params.get('line_login');
         const lineBound = params.get('line_bound');
         const lineError = params.get('line_error');
-        if (lineUid || lineBound || lineError) {
+        if (lineLogin || lineBound || lineError) {
           window.history.replaceState({}, '', '/');
-          if (lineUid) {
+          if (lineLogin === 'ok') {
             lineLoginInProgress.current = true;
-            // LINE login: auto-load user from DB then enter app
-            const uid = decodeURIComponent(lineUid);
+            // LINE login: UserID 從 HttpOnly cookie 取得，避免出現在 URL
+            let uid: string | null = null;
+            try {
+              const meRes = await fetch('/api/auth/me', { credentials: 'include' });
+              if (meRes.ok) {
+                const meBody = await meRes.json();
+                uid = typeof meBody?.uid === 'string' && meBody.uid.length > 0 ? meBody.uid : null;
+              }
+            } catch { /* noop — fall through to login screen */ }
+            if (!uid) {
+              lineLoginInProgress.current = false;
+              setView('login');
+              return;
+            }
             const { data: stats, error } = await supabase.from('CharacterStats').select('*').eq('UserID', uid).single();
             if (stats && !error) {
               const { data: userLogs } = await supabase.from('DailyLogs').select('*').eq('UserID', stats.UserID);
@@ -752,11 +794,27 @@ export default function App() {
 
   useEffect(() => {
     const fetchRank = async () => {
-      const { data: rankData } = await supabase.from('CharacterStats').select('*').order('Exp', { ascending: false });
+      const { data: rankData } = await supabase
+        .from('CharacterStats')
+        .select('UserID, Name, Exp, Streak, TeamName, SquadName, SquadRole, IsCommandant, IsCaptain, TotalFines')
+        .order('Exp', { ascending: false });
       if (rankData) setLeaderboard(rankData as CharacterStats[]);
     };
     if (activeTab === 'rank' || view === 'admin') fetchRank();
   }, [activeTab, view]);
+
+  // 成就解鎖紀錄：使用者登入後拉一次
+  useEffect(() => {
+    const uid = userData?.UserID;
+    if (!uid) return;
+    supabase
+      .from('Achievements')
+      .select('user_id, achievement_id, unlocked_at, unlock_source')
+      .eq('user_id', uid)
+      .then(({ data }) => {
+        if (data) setPlayerAchievements(data as PlayerAchievement[]);
+      });
+  }, [userData?.UserID]);
 
   // Refresh w4 applications whenever the weekly tab becomes active
   useEffect(() => {
@@ -852,6 +910,16 @@ export default function App() {
           </button>
         ))}
         <button
+          onClick={() => setActiveTab('achievements')}
+          className={`shrink-0 flex items-center gap-1.5 px-5 py-3 rounded-full text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer
+            ${activeTab === 'achievements'
+              ? 'bg-[#C0392B] text-white shadow-[0_0_15px_rgba(229,9,20,0.4)]'
+              : 'bg-[#1B2A4A] text-[rgba(255,255,255,0.45)] hover:text-white hover:bg-[#253A5C]'}`}
+        >
+          <Trophy size={13} />
+          片廠榮耀
+        </button>
+        <button
           onClick={() => setActiveTab('course')}
           className={`shrink-0 flex items-center gap-1.5 px-5 py-3 rounded-full text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer
             ${activeTab === 'course'
@@ -930,6 +998,7 @@ export default function App() {
         )}
         {activeTab === 'rank' && <RankTab leaderboard={leaderboard} currentUserId={userData?.UserID} />}
         {activeTab === 'stats' && userData && <StatsTab userData={userData} />}
+        {activeTab === 'achievements' && <AchievementsTab unlocks={playerAchievements} />}
         {activeTab === 'captain' && showCaptainTab && userData && (
           <CaptainTab
             teamName={userData.TeamName || '未編組'}
@@ -1045,6 +1114,29 @@ export default function App() {
       )}
 
       {modalMessage && <MessageBox message={modalMessage.text} type={modalMessage.type} onClose={() => setModalMessage(null)} />}
+
+      {unlockToast && (
+        <div className="fixed inset-x-0 top-0 z-[1200] flex justify-center pointer-events-none p-4 animate-in fade-in slide-in-from-top duration-500">
+          <button
+            onClick={() => { setUnlockToast(null); setActiveTab('achievements'); }}
+            className="pointer-events-auto flex items-center gap-3 max-w-md w-full bg-gradient-to-r from-amber-600/95 to-amber-500/95 border-2 border-amber-300 rounded-3xl p-4 shadow-2xl shadow-amber-500/50 text-left cursor-pointer hover:scale-[1.01] transition-transform"
+          >
+            <img
+              src={`/achievements/${unlockToast.id}.png`}
+              alt=""
+              className="w-16 h-16 object-contain shrink-0"
+            />
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px] font-black tracking-widest text-amber-100 uppercase">
+                <Trophy size={10} className="inline mb-0.5 mr-1" />
+                新成就解鎖
+              </div>
+              <div className="text-white font-black text-sm truncate">{unlockToast.description}</div>
+              <div className="text-amber-100 text-[11px] italic line-clamp-1">「{unlockToast.hint}」</div>
+            </div>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

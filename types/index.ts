@@ -131,19 +131,6 @@ export interface AdminLog {
   created_at: string;
 }
 
-export interface Testimony {
-  id: string;
-  line_group_id: string | null;
-  line_user_id: string;
-  display_name: string | null;
-  parsed_name: string | null;
-  parsed_date: string | null;
-  parsed_category: string | null;
-  content: string;
-  raw_message: string;
-  created_at: string;
-}
-
 export interface TopicHistory {
   id: number;
   TopicTitle: string;
@@ -209,4 +196,19 @@ export interface AngelCallPairing {
 export interface AngelCallPairingsData {
   weekOf: string;
   pairings: AngelCallPairing[];
+}
+
+export interface PlayerAchievement {
+  user_id: string;
+  achievement_id: string;   // 儲存為字串（ID 1..61 以字串形式存在 Achievements.achievement_id）
+  unlocked_at: string;
+  unlock_source?: 'auto' | 'admin_manual';
+}
+
+export interface AchievementProgress {
+  achievementId: number;
+  current: number;
+  target: number;
+  unlocked: boolean;
+  unlockedAt?: string;
 }

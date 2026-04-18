@@ -1,6 +1,7 @@
 import React from 'react';
-import { Settings, X, BarChart3, Save, Users, Lock, QrCode, AlertTriangle, Clapperboard, Sliders, UserCog, Film, Plus, Pencil, Trash2, Check } from 'lucide-react';
+import { Settings, X, BarChart3, Save, Users, Lock, QrCode, AlertTriangle, Clapperboard, Sliders, UserCog, Film, Plus, Pencil, Trash2, Check, Trophy } from 'lucide-react';
 import { SystemSettings, CharacterStats, TemporaryQuest, BonusApplication, AdminLog, Screening } from '@/types';
+import { AchievementsPanel } from '@/components/Admin/AchievementsPanel';
 
 import { DAILY_QUEST_CONFIG, WEEKLY_QUEST_CONFIG } from '@/lib/constants';
 import { listAllMembers, transferMember, setMemberRole } from '@/app/actions/admin';
@@ -565,6 +566,13 @@ export function AdminDashboard({
                                     );
                                 })
                             )}
+                        </div>
+                    </section>
+
+                    <section className="space-y-6">
+                        <div className="flex items-center gap-2 text-amber-400 font-black text-sm uppercase tracking-widest"><Trophy size={16} /> 成就管理</div>
+                        <div className="bg-slate-900 border-2 border-amber-500/20 p-6 rounded-4xl shadow-xl">
+                            <AchievementsPanel actorName="admin" />
                         </div>
                     </section>
 
